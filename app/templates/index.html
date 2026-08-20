@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div id="status-banner" class="status-banner status-unknown">
+    <span class="dot"></span>
+    <span id="status-text">Đang kiểm tra trạng thái hệ thống...</span>
+</div>
+
+<section class="card login-card">
+    <h1 class="headline">Đăng nhập {{ app_name }}</h1>
+    <p class="sub">Cổng ngân hàng số nội bộ &mdash; bản dùng cho seminar</p>
+
+    <form id="login-form" method="POST" action="/login" autocomplete="off">
+        <label for="username">Tên đăng nhập</label>
+        <input type="text" id="username" name="username" placeholder="ví dụ: alice" required>
+
+        <label for="password">Mật khẩu</label>
+        <input type="password" id="password" name="password" placeholder="********" required>
+
+        <button type="submit" class="btn btn-primary">Đăng nhập</button>
+    </form>
+
+    <div class="divider"><span>hoặc thử tấn công</span></div>
+
+    <button id="hack-btn" class="btn btn-danger" type="button">
+        <span class="hack-icon">&#9760;</span>
+        THỬ CHIẾM QUYỀN ADMIN
+    </button>
+    <p class="hint">
+        Nút này tự điền sẵn payload
+        <code id="payload-text">{{ payload }}</code>
+        vào ô tên đăng nhập rồi gửi đi. Bạn không cần gõ gì cả.
+    </p>
+</section>
+
+<section class="card info-card">
+    <h2>Chuyện gì đang diễn ra ở đây?</h2>
+    <p>
+        Đây là ứng dụng ngân hàng <strong>cố ý cài lỗ hổng</strong>, phục vụ buổi seminar
+        về AI-Augmented DevSecOps. Toàn bộ dữ liệu là giả.
+    </p>
+    <p>
+        <strong>Chỉ có duy nhất một địa chỉ web này</strong> xuyên suốt buổi demo. Đầu buổi bạn
+        sẽ chiếm được quyền admin. Cuối buổi, sau khi AI tự vá lỗ hổng và bản vá được triển khai
+        lên chính địa chỉ này, hãy bấm lại đúng nút đó để xem điều gì thay đổi.
+    </p>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.LABBANK_PAYLOAD = {{ payload | tojson }};
+</script>
+{% endblock %}

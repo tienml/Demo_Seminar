@@ -1,0 +1,653 @@
+{
+  "meta": {
+    "purpose": "Bản kiểm kê dự phòng, dùng khi thư mục findings/ chưa có file SARIF thật.",
+    "how_to_get_real_data": "gh run download <run-id> --dir findings   hoặc   python scripts/scan_local.py",
+    "honesty_note": "Đây là ảnh chụp gần đúng của một lần quét trên base image python:3.9.7-slim. Con số thật sẽ thay đổi theo phiên bản scanner và CSDL CVE tại thời điểm chạy. Khi agent dùng tới nguồn này, nó in cảnh báo rõ ràng ra terminal để người trình bày đọc số trên màn hình thay vì đọc số đã thuộc lòng.",
+    "expected_split": {
+      "actionable": 18,
+      "no_fix_or_unreachable": 14,
+      "low_risk_or_duplicate": 9
+    }
+  },
+  "findings": [
+    {
+      "rule_id": "generic-api-key",
+      "tool": "gitleaks",
+      "severity": "critical",
+      "message": "Detected a Generic API Key committed to the repository",
+      "file": "app/config.py",
+      "line": 14,
+      "cwe": "CWE-798",
+      "evidence": {
+        "component": "secret",
+        "secret_prefix": "sk_live_",
+        "in_git_history": true,
+        "exploit_path": "Khoá nằm trong lịch sử Git, ai clone repo cũng đọc được."
+      }
+    },
+    {
+      "rule_id": "github-pat",
+      "tool": "gitleaks",
+      "severity": "critical",
+      "message": "Detected a GitHub Personal Access Token",
+      "file": "app/config.py",
+      "line": 15,
+      "cwe": "CWE-798",
+      "evidence": {
+        "component": "secret",
+        "secret_prefix": "ghp_",
+        "in_git_history": true,
+        "exploit_path": "Token có thể dùng để gọi API GitHub thay mặt chủ sở hữu."
+      }
+    },
+    {
+      "rule_id": "flask-secret-key",
+      "tool": "gitleaks",
+      "severity": "high",
+      "message": "Detected a hardcoded Flask session signing key",
+      "file": "app/config.py",
+      "line": 13,
+      "cwe": "CWE-798",
+      "evidence": {
+        "component": "secret",
+        "secret_prefix": "labbank-flask-secret",
+        "in_git_history": true,
+        "exploit_path": "Biết khoá này là giả mạo được cookie phiên của bất kỳ người dùng nào."
+      }
+    },
+    {
+      "rule_id": "labbank-sql-string-concat",
+      "tool": "semgrep",
+      "severity": "critical",
+      "message": "Câu truy vấn SQL được dựng bằng nối chuỗi từ dữ liệu người dùng",
+      "file": "app/auth.py",
+      "line": 21,
+      "cwe": "CWE-89",
+      "evidence": {
+        "component": "app-code",
+        "reachable_from_http": true,
+        "entrypoints": ["POST /login", "POST /forgot-password", "GET /api/admin/search"],
+        "taint_source": "request.form['username']",
+        "shared_helper": "build_user_query",
+        "exploit_path": "request.form -> build_user_query -> sqlite3.execute"
+      }
+    },
+    {
+      "rule_id": "labbank-sql-string-concat",
+      "tool": "semgrep",
+      "severity": "critical",
+      "message": "Mệnh đề password cũng được nối chuỗi, cho phép bỏ qua kiểm tra mật khẩu",
+      "file": "app/auth.py",
+      "line": 23,
+      "cwe": "CWE-89",
+      "evidence": {
+        "component": "app-code",
+        "reachable_from_http": true,
+        "entrypoints": ["POST /login"],
+        "taint_source": "request.form['password']",
+        "shared_helper": "build_user_query",
+        "exploit_path": "request.form -> build_user_query -> sqlite3.execute"
+      }
+    },
+    {
+      "rule_id": "labbank-sqlite-execute-non-parameterized",
+      "tool": "semgrep",
+      "severity": "critical",
+      "message": "execute() nhận vào chuỗi đã dựng sẵn thay vì cặp (câu lệnh, tham số)",
+      "file": "app/auth.py",
+      "line": 31,
+      "cwe": "CWE-89",
+      "evidence": {
+        "component": "app-code",
+        "reachable_from_http": true,
+        "entrypoints": ["POST /login"],
+        "taint_source": "request.form",
+        "shared_helper": "build_user_query",
+        "exploit_path": "authenticate() -> build_user_query() -> execute()"
+      }
+    },
+    {
+      "rule_id": "labbank-sqlite-execute-non-parameterized",
+      "tool": "semgrep",
+      "severity": "critical",
+      "message": "execute() nhận vào chuỗi đã dựng sẵn thay vì cặp (câu lệnh, tham số)",
+      "file": "app/auth.py",
+      "line": 43,
+      "cwe": "CWE-89",
+      "evidence": {
+        "component": "app-code",
+        "reachable_from_http": true,
+        "entrypoints": ["POST /forgot-password"],
+        "taint_source": "request.form",
+        "shared_helper": "build_user_query",
+        "exploit_path": "find_user_for_reset() -> build_user_query() -> execute()"
+      }
+    },
+    {
+      "rule_id": "labbank-sql-string-concat",
+      "tool": "semgrep",
+      "severity": "critical",
+      "message": "Ô tìm kiếm trong trang quản trị nối thẳng từ khoá vào mệnh đề LIKE",
+      "file": "app/auth.py",
+      "line": 57,
+      "cwe": "CWE-89",
+      "evidence": {
+        "component": "app-code",
+        "reachable_from_http": true,
+        "entrypoints": ["GET /api/admin/search"],
+        "taint_source": "request.args['q']",
+        "exploit_path": "admin_search() -> execute()"
+      }
+    },
+    {
+      "rule_id": "labbank-missing-authorization-check",
+      "tool": "semgrep",
+      "severity": "high",
+      "message": "Endpoint trả về hồ sơ theo id lấy từ URL nhưng không kiểm tra quyền sở hữu",
+      "file": "app/main.py",
+      "line": 117,
+      "cwe": "CWE-639",
+      "evidence": {
+        "component": "app-code",
+        "reachable_from_http": true,
+        "entrypoints": ["GET /api/user/<id>/profile"],
+        "taint_source": "url path parameter",
+        "exploit_path": "Người dùng đã đăng nhập đổi id trên URL để đọc hồ sơ người khác."
+      }
+    },
+    {
+      "rule_id": "python.flask.security.audit.missing-security-headers",
+      "tool": "semgrep",
+      "severity": "medium",
+      "message": "Ứng dụng không đặt các header bảo mật cơ bản cho phản hồi HTTP",
+      "file": "app/main.py",
+      "line": 44,
+      "cwe": "CWE-693",
+      "evidence": {
+        "component": "app-code",
+        "reachable_from_http": true,
+        "entrypoints": ["mọi route"],
+        "exploit_path": "Thiếu CSP và X-Frame-Options mở đường cho clickjacking và XSS."
+      }
+    },
+    {
+      "rule_id": "CVE-2023-32681",
+      "tool": "trivy",
+      "severity": "high",
+      "message": "requests 2.25.1: Proxy-Authorization header bị rò rỉ sang host khác khi redirect",
+      "file": "requirements.txt",
+      "line": 5,
+      "cwe": "CWE-200",
+      "evidence": {
+        "component": "app-dep",
+        "package": "requests",
+        "installed_version": "2.25.1",
+        "fixed_version": "2.31.0",
+        "direct_dependency": true,
+        "imported_by": ["app/external.py"]
+      }
+    },
+    {
+      "rule_id": "CVE-2024-35195",
+      "tool": "trivy",
+      "severity": "medium",
+      "message": "requests 2.25.1: Session bỏ qua verify=False ở các request sau trong cùng phiên",
+      "file": "requirements.txt",
+      "line": 5,
+      "cwe": "CWE-670",
+      "evidence": {
+        "component": "app-dep",
+        "package": "requests",
+        "installed_version": "2.25.1",
+        "fixed_version": "2.32.0",
+        "direct_dependency": true,
+        "imported_by": ["app/external.py"]
+      }
+    },
+    {
+      "rule_id": "CVE-2024-3651",
+      "tool": "trivy",
+      "severity": "high",
+      "message": "idna 2.10: hàm encode() có thể bị tiêu tốn tài nguyên bởi tên miền dựng đặc biệt",
+      "file": "requirements.txt",
+      "line": 5,
+      "cwe": "CWE-400",
+      "evidence": {
+        "component": "app-dep",
+        "package": "idna",
+        "installed_version": "2.10",
+        "fixed_version": "3.7",
+        "direct_dependency": false,
+        "pulled_by": "requests"
+      }
+    },
+    {
+      "rule_id": "DS002",
+      "tool": "trivy",
+      "severity": "high",
+      "message": "Image user should not be 'root' — không có chỉ thị USER trong Dockerfile",
+      "file": "Dockerfile",
+      "line": 8,
+      "cwe": "CWE-250",
+      "evidence": {
+        "component": "container",
+        "applies_to_deployment": true,
+        "exploit_path": "Thoát được khỏi tiến trình ứng dụng là có ngay quyền root trong container."
+      }
+    },
+    {
+      "rule_id": "DL3013",
+      "tool": "hadolint",
+      "severity": "medium",
+      "message": "Pin versions in pip. Instead of `pip install <package>` use `pip install <package>==<version>`",
+      "file": "Dockerfile",
+      "line": 14,
+      "cwe": "CWE-1104",
+      "evidence": {
+        "component": "container",
+        "applies_to_deployment": true,
+        "exploit_path": "Build không tái lập được, mở đường cho tấn công chuỗi cung ứng."
+      }
+    },
+    {
+      "rule_id": "CKV_AWS_24",
+      "tool": "checkov",
+      "severity": "critical",
+      "message": "Ensure no security groups allow ingress from 0.0.0.0:0 to port 22",
+      "file": "infra/main.tf",
+      "line": 23,
+      "cwe": "CWE-284",
+      "evidence": {
+        "component": "iac",
+        "applies_to_deployment": true,
+        "resource": "aws_security_group.labbank_web",
+        "exploit_path": "SSH mở ra toàn internet, bị quét và brute-force liên tục."
+      }
+    },
+    {
+      "rule_id": "CKV_AWS_277",
+      "tool": "checkov",
+      "severity": "high",
+      "message": "Ensure no security groups allow ingress from 0.0.0.0:0 to all ports",
+      "file": "infra/main.tf",
+      "line": 31,
+      "cwe": "CWE-284",
+      "evidence": {
+        "component": "iac",
+        "applies_to_deployment": true,
+        "resource": "aws_security_group.labbank_web",
+        "exploit_path": "Toàn bộ dải cổng 0-65535 mở ra internet."
+      }
+    },
+    {
+      "rule_id": "CKV_AWS_53",
+      "tool": "checkov",
+      "severity": "high",
+      "message": "Ensure S3 bucket has block public ACLs enabled",
+      "file": "infra/main.tf",
+      "line": 51,
+      "cwe": "CWE-732",
+      "evidence": {
+        "component": "iac",
+        "applies_to_deployment": true,
+        "resource": "aws_s3_bucket_public_access_block.labbank_statements",
+        "exploit_path": "Bucket chứa sao kê khách hàng có thể bị đặt public."
+      }
+    },
+
+    {
+      "rule_id": "CVE-2019-8457",
+      "tool": "trivy",
+      "severity": "critical",
+      "message": "libdb5.3: SQLite rtree out-of-bounds read",
+      "file": "python:3.9.7-slim (debian 11.1)",
+      "line": 0,
+      "cwe": "CWE-125",
+      "evidence": {
+        "component": "os-pkg",
+        "package": "libdb5.3",
+        "installed_version": "5.3.28+dfsg1-0.8",
+        "fixed_version": "",
+        "loaded_by_app": false
+      }
+    },
+    {
+      "rule_id": "CVE-2021-33574",
+      "tool": "trivy",
+      "severity": "critical",
+      "message": "glibc: mq_notify does not handle separately allocated thread attributes",
+      "file": "python:3.9.7-slim (debian 11.1)",
+      "line": 0,
+      "cwe": "CWE-416",
+      "evidence": {
+        "component": "os-pkg",
+        "package": "libc6",
+        "installed_version": "2.31-13+deb11u2",
+        "fixed_version": "",
+        "loaded_by_app": false
+      }
+    },
+    {
+      "rule_id": "CVE-2021-35942",
+      "tool": "trivy",
+      "severity": "high",
+      "message": "glibc: wordexp may write beyond allocated buffer",
+      "file": "python:3.9.7-slim (debian 11.1)",
+      "line": 0,
+      "cwe": "CWE-787",
+      "evidence": {
+        "component": "os-pkg",
+        "package": "libc6",
+        "installed_version": "2.31-13+deb11u2",
+        "fixed_version": "",
+        "loaded_by_app": false
+      }
+    },
+    {
+      "rule_id": "CVE-2022-23218",
+      "tool": "trivy",
+      "severity": "high",
+      "message": "glibc: buffer overflow in svcunix_create",
+      "file": "python:3.9.7-slim (debian 11.1)",
+      "line": 0,
+      "cwe": "CWE-787",
+      "evidence": {
+        "component": "os-pkg",
+        "package": "libc6",
+        "installed_version": "2.31-13+deb11u2",
+        "fixed_version": "",
+        "loaded_by_app": false
+      }
+    },
+    {
+      "rule_id": "CVE-2022-23219",
+      "tool": "trivy",
+      "severity": "high",
+      "message": "glibc: buffer overflow in clnt_create for unix socket",
+      "file": "python:3.9.7-slim (debian 11.1)",
+      "line": 0,
+      "cwe": "CWE-787",
+      "evidence": {
+        "component": "os-pkg",
+        "package": "libc6",
+        "installed_version": "2.31-13+deb11u2",
+        "fixed_version": "",
+        "loaded_by_app": false
+      }
+    },
+    {
+      "rule_id": "CVE-2023-4911",
+      "tool": "trivy",
+      "severity": "high",
+      "message": "glibc: buffer overflow in ld.so khi xử lý GLIBC_TUNABLES",
+      "file": "python:3.9.7-slim (debian 11.1)",
+      "line": 0,
+      "cwe": "CWE-787",
+      "evidence": {
+        "component": "os-pkg",
+        "package": "libc6",
+        "installed_version": "2.31-13+deb11u2",
+        "fixed_version": "",
+        "loaded_by_app": false
+      }
+    },
+    {
+      "rule_id": "CVE-2024-2961",
+      "tool": "trivy",
+      "severity": "high",
+      "message": "glibc: iconv ghi tràn bộ đệm khi chuyển sang bộ mã ISO-2022-CN-EXT",
+      "file": "python:3.9.7-slim (debian 11.1)",
+      "line": 0,
+      "cwe": "CWE-787",
+      "evidence": {
+        "component": "os-pkg",
+        "package": "libc6",
+        "installed_version": "2.31-13+deb11u2",
+        "fixed_version": "",
+        "loaded_by_app": false
+      }
+    },
+    {
+      "rule_id": "CVE-2022-1292",
+      "tool": "trivy",
+      "severity": "critical",
+      "message": "openssl: c_rehash script cho phép chèn lệnh",
+      "file": "python:3.9.7-slim (debian 11.1)",
+      "line": 0,
+      "cwe": "CWE-78",
+      "evidence": {
+        "component": "os-pkg",
+        "package": "openssl",
+        "installed_version": "1.1.1k-1+deb11u1",
+        "fixed_version": "",
+        "loaded_by_app": false
+      }
+    },
+    {
+      "rule_id": "CVE-2022-0778",
+      "tool": "trivy",
+      "severity": "high",
+      "message": "openssl: BN_mod_sqrt lặp vô hạn với chứng thư dựng đặc biệt",
+      "file": "python:3.9.7-slim (debian 11.1)",
+      "line": 0,
+      "cwe": "CWE-835",
+      "evidence": {
+        "component": "os-pkg",
+        "package": "libssl1.1",
+        "installed_version": "1.1.1k-1+deb11u1",
+        "fixed_version": "",
+        "loaded_by_app": false
+      }
+    },
+    {
+      "rule_id": "CVE-2021-3711",
+      "tool": "trivy",
+      "severity": "critical",
+      "message": "openssl: SM2 decryption buffer overflow",
+      "file": "python:3.9.7-slim (debian 11.1)",
+      "line": 0,
+      "cwe": "CWE-787",
+      "evidence": {
+        "component": "os-pkg",
+        "package": "libssl1.1",
+        "installed_version": "1.1.1k-1+deb11u1",
+        "fixed_version": "",
+        "loaded_by_app": false
+      }
+    },
+    {
+      "rule_id": "CVE-2022-37434",
+      "tool": "trivy",
+      "severity": "critical",
+      "message": "zlib: heap buffer over-read trong inflateGetHeader",
+      "file": "python:3.9.7-slim (debian 11.1)",
+      "line": 0,
+      "cwe": "CWE-787",
+      "evidence": {
+        "component": "os-pkg",
+        "package": "zlib1g",
+        "installed_version": "1:1.2.11.dfsg-2",
+        "fixed_version": "",
+        "loaded_by_app": false
+      }
+    },
+    {
+      "rule_id": "CVE-2015-20107",
+      "tool": "trivy",
+      "severity": "high",
+      "message": "python: mailcap.findmatch cho phép chèn lệnh shell",
+      "file": "python:3.9.7-slim (debian 11.1)",
+      "line": 0,
+      "cwe": "CWE-77",
+      "evidence": {
+        "component": "os-pkg",
+        "package": "python3.9",
+        "installed_version": "3.9.7-1",
+        "fixed_version": "",
+        "loaded_by_app": false,
+        "note": "Ứng dụng không import mailcap."
+      }
+    },
+    {
+      "rule_id": "CVE-2022-42919",
+      "tool": "trivy",
+      "severity": "high",
+      "message": "python: multiprocessing forkserver cho phép leo thang đặc quyền cục bộ trên Linux",
+      "file": "python:3.9.7-slim (debian 11.1)",
+      "line": 0,
+      "cwe": "CWE-269",
+      "evidence": {
+        "component": "os-pkg",
+        "package": "python3.9",
+        "installed_version": "3.9.7-1",
+        "fixed_version": "",
+        "loaded_by_app": false,
+        "note": "Ứng dụng không dùng multiprocessing."
+      }
+    },
+    {
+      "rule_id": "CVE-2022-40897",
+      "tool": "trivy",
+      "severity": "high",
+      "message": "setuptools: ReDoS trong package_index",
+      "file": "python:3.9.7-slim (debian 11.1)",
+      "line": 0,
+      "cwe": "CWE-1333",
+      "evidence": {
+        "component": "os-pkg",
+        "package": "setuptools",
+        "installed_version": "57.5.0",
+        "fixed_version": "",
+        "loaded_by_app": false,
+        "note": "Chỉ dùng lúc build, không có trong runtime image."
+      }
+    },
+
+    {
+      "rule_id": "labbank-hardcoded-secret",
+      "tool": "semgrep",
+      "severity": "medium",
+      "message": "Khoá bí mật được nhúng cứng trong mã nguồn",
+      "file": "app/config.py",
+      "line": 13,
+      "cwe": "CWE-798",
+      "evidence": {
+        "component": "app-code",
+        "reachable_from_http": false,
+        "duplicate_of": "gitleaks/flask-secret-key@app/config.py:13"
+      }
+    },
+    {
+      "rule_id": "labbank-hardcoded-secret",
+      "tool": "semgrep",
+      "severity": "medium",
+      "message": "Khoá bí mật được nhúng cứng trong mã nguồn",
+      "file": "app/config.py",
+      "line": 14,
+      "cwe": "CWE-798",
+      "evidence": {
+        "component": "app-code",
+        "reachable_from_http": false,
+        "duplicate_of": "gitleaks/generic-api-key@app/config.py:14"
+      }
+    },
+    {
+      "rule_id": "labbank-hardcoded-secret",
+      "tool": "semgrep",
+      "severity": "medium",
+      "message": "Khoá bí mật được nhúng cứng trong mã nguồn",
+      "file": "app/config.py",
+      "line": 15,
+      "cwe": "CWE-798",
+      "evidence": {
+        "component": "app-code",
+        "reachable_from_http": false,
+        "duplicate_of": "gitleaks/github-pat@app/config.py:15"
+      }
+    },
+    {
+      "rule_id": "python.flask.security.audit.app-run-security-config",
+      "tool": "semgrep",
+      "severity": "medium",
+      "message": "app.run() lắng nghe trên 0.0.0.0",
+      "file": "app/main.py",
+      "line": 161,
+      "cwe": "CWE-668",
+      "evidence": {
+        "component": "app-code",
+        "reachable_from_http": false,
+        "note": "Nằm trong khối __main__, chỉ chạy khi gọi trực tiếp. Bản triển khai dùng gunicorn nên nhánh này là mã chết."
+      }
+    },
+    {
+      "rule_id": "python.lang.best-practice.broad-exception-caught",
+      "tool": "semgrep",
+      "severity": "low",
+      "message": "Bắt Exception quá rộng làm che mất lỗi thật",
+      "file": "app/auth.py",
+      "line": 34,
+      "cwe": "",
+      "evidence": {
+        "component": "app-code",
+        "reachable_from_http": true,
+        "note": "Vấn đề chất lượng mã, không phải lỗ hổng khai thác được."
+      }
+    },
+    {
+      "rule_id": "python.lang.best-practice.broad-exception-caught",
+      "tool": "semgrep",
+      "severity": "low",
+      "message": "Bắt Exception quá rộng làm che mất lỗi thật",
+      "file": "app/auth.py",
+      "line": 46,
+      "cwe": "",
+      "evidence": {
+        "component": "app-code",
+        "reachable_from_http": true,
+        "note": "Vấn đề chất lượng mã, không phải lỗ hổng khai thác được."
+      }
+    },
+    {
+      "rule_id": "python.lang.best-practice.broad-exception-caught",
+      "tool": "semgrep",
+      "severity": "low",
+      "message": "Bắt Exception quá rộng làm che mất lỗi thật",
+      "file": "app/external.py",
+      "line": 37,
+      "cwe": "",
+      "evidence": {
+        "component": "app-code",
+        "reachable_from_http": true,
+        "note": "Ở đây là chủ ý: luôn trả về tỉ giá mặc định khi mạng lỗi."
+      }
+    },
+    {
+      "rule_id": "DL3059",
+      "tool": "hadolint",
+      "severity": "info",
+      "message": "Multiple consecutive RUN instructions. Consider consolidation.",
+      "file": "Dockerfile",
+      "line": 14,
+      "cwe": "",
+      "evidence": {
+        "component": "container",
+        "applies_to_deployment": false,
+        "note": "Tối ưu kích thước layer, không liên quan bảo mật."
+      }
+    },
+    {
+      "rule_id": "DS026",
+      "tool": "trivy",
+      "severity": "low",
+      "message": "No HEALTHCHECK defined in Dockerfile",
+      "file": "Dockerfile",
+      "line": 8,
+      "cwe": "",
+      "evidence": {
+        "component": "container",
+        "applies_to_deployment": false,
+        "note": "Render đã cấu hình healthCheckPath riêng ở tầng nền tảng."
+      }
+    }
+  ]
+}

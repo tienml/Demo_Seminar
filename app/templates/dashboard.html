@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}Tài khoản của tôi{% endblock %}
+
+{% block content %}
+<section class="card login-card">
+    <h1 class="headline">Xin chào, {{ user.fullname }}</h1>
+    <p class="sub">Tài khoản {{ user.username }} &mdash; quyền {{ user.role }}</p>
+
+    <div class="breach-row">
+        <span>Số dư khả dụng</span>
+        <strong class="money">{{ "{:,}".format(user.balance) }} đ</strong>
+    </div>
+    <div class="breach-row">
+        <span>Email</span>
+        <strong>{{ user.email }}</strong>
+    </div>
+    <div class="breach-row">
+        <span>Điện thoại</span>
+        <strong>{{ user.phone }}</strong>
+    </div>
+
+    <a class="btn btn-ghost" href="/logout">Đăng xuất</a>
+</section>
+{% endblock %}

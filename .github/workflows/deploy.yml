@@ -1,0 +1,114 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # Vai trò "staging": dựng ứng dụng trong một môi trường cô lập rồi tự tấn công
+  # lại bằng đúng payload của khán giả. Không tạo thêm URL công khai nào, nên cả
+  # buổi demo vẫn chỉ có duy nhất một địa chỉ web và một mã QR.
+  staging-verify:
+    name: Staging — dựng và tự tấn công lại
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt pytest gunicorn
+
+      - name: Khởi động ứng dụng
+        run: |
+          gunicorn --bind 127.0.0.1:5000 --workers 2 app.main:app &
+          for i in $(seq 1 30); do
+            curl -sf http://127.0.0.1:5000/healthz && break
+            sleep 1
+          done
+
+      - name: Tự tấn công lại bằng payload SQL Injection
+        run: |
+          code=$(curl -s -o /tmp/body.html -w "%{http_code}" \
+            -X POST http://127.0.0.1:5000/login \
+            --data-urlencode "username=admin' OR '1'='1--" \
+            --data-urlencode "password=khong-can")
+          echo "HTTP $code"
+          if [ "$code" != "401" ]; then
+            echo "::error::Payload vẫn đăng nhập được. Không cho phép deploy."
+            exit 1
+          fi
+
+      - name: Xác nhận endpoint /version báo đã vá
+        run: |
+          curl -s http://127.0.0.1:5000/version | tee /tmp/version.json
+          grep -q '"patched": *true' /tmp/version.json
+
+      - name: Chạy toàn bộ test bảo mật
+        run: pytest tests/test_security.py -q
+
+      - name: Ghi kết luận
+        run: |
+          echo "## Staging đã xác minh" >> $GITHUB_STEP_SUMMARY
+          echo "- Payload \`admin' OR '1'='1--\` nhận về **401**" >> $GITHUB_STEP_SUMMARY
+          echo "- Toàn bộ test bảo mật **xanh**" >> $GITHUB_STEP_SUMMARY
+          echo "- Sẵn sàng chờ người phê duyệt để lên production" >> $GITHUB_STEP_SUMMARY
+
+  # CỔNG PHÊ DUYỆT.
+  # Cấu hình repo: Settings → Environments → production → Required reviewers.
+  # Job này sẽ dừng lại và chờ một con người bấm Approve.
+  deploy-production:
+    name: Production — chờ người phê duyệt
+    needs: staging-verify
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: ${{ vars.PUBLIC_APP_URL }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Gọi deploy hook của Render
+        env:
+          HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "::error::Chưa cấu hình secret RENDER_DEPLOY_HOOK."
+            exit 1
+          fi
+          curl -sf "$HOOK" -o /dev/null
+          echo "Đã kích hoạt deploy trên Render."
+
+      - name: Chờ bản vá xuất hiện trên địa chỉ công khai
+        env:
+          APP_URL: ${{ vars.PUBLIC_APP_URL }}
+        run: |
+          echo "Theo dõi $APP_URL/version"
+          for i in $(seq 1 90); do
+            body=$(curl -s --max-time 10 "$APP_URL/version" || true)
+            if echo "$body" | grep -q '"patched": *true'; then
+              echo ""
+              echo "Bản vá đã lên production sau khoảng $((i * 5)) giây."
+              exit 0
+            fi
+            printf "[%3ds] đang chờ Render dựng lại...\n" $((i * 5))
+            sleep 5
+          done
+          echo "::error::Hết thời gian chờ. Kiểm tra log trên Render."
+          exit 1
+
+      - name: Chốt lại bằng một lần tấn công thật vào production
+        env:
+          APP_URL: ${{ vars.PUBLIC_APP_URL }}
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" \
+            -X POST "$APP_URL/login" \
+            --data-urlencode "username=admin' OR '1'='1--" \
+            --data-urlencode "password=khong-can")
+          echo "Production trả về HTTP $code"
+          [ "$code" = "401" ]
+          echo "## Production đã được vá" >> $GITHUB_STEP_SUMMARY
+          echo "Payload cũ nhận về **401** trên chính địa chỉ khán giả đang mở." >> $GITHUB_STEP_SUMMARY

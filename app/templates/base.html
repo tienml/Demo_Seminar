@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="robots" content="noindex, nofollow">
+    <title>{% block title %}{{ app_name }}{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <div class="app-shell">
+        <header class="topbar">
+            <span class="brand">🏦 {{ app_name }}</span>
+            <span class="tag">DEMO — AI-Augmented DevSecOps</span>
+        </header>
+        <main class="content">
+            {% block content %}{% endblock %}
+        </main>
+        <footer class="foot">
+            Ứng dụng demo có lỗ hổng cố ý · Dữ liệu giả · Chỉ dùng trong seminar
+        </footer>
+    </div>
+    <script src="{{ url_for('static', filename='effects.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

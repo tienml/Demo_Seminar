@@ -1,0 +1,34 @@
+"""Gọi dịch vụ ngoài (tỉ giá) và ký request nội bộ.
+
+Bản vá bổ sung sau khi bộ kiểm thử đỏ.
+
+Bản vá khoá bí mật đã gỡ hằng số ADMIN_API_KEY khỏi app/config.py, làm câu
+lệnh import ở đầu module này gãy và kéo theo hai bài test đỏ. Cách sửa không
+phải là đưa hằng số quay lại, mà là đọc biến môi trường ngay tại thời điểm
+cần dùng — nhờ vậy khoá xoay vòng có hiệu lực mà không phải khởi động lại
+tiến trình.
+"""
+
+import os
+
+import requests
+
+from .config import RATE_SERVICE_URL
+
+DEFAULT_RATE = 25_400.0
+REQUEST_TIMEOUT = 3
+
+
+def internal_auth_header() -> dict:
+    """Header dùng khi gọi các dịch vụ nội bộ khác."""
+    return {"X-Internal-Key": os.environ.get("ADMIN_API_KEY", "dev-local-admin-key")}
+
+
+def get_usd_vnd_rate() -> float:
+    """Lấy tỉ giá USD/VND. Luôn trả về giá trị mặc định nếu mạng lỗi."""
+    try:
+        resp = requests.get(RATE_SERVICE_URL, timeout=REQUEST_TIMEOUT)
+        resp.raise_for_status()
+        return float(resp.json()["rates"]["VND"])
+    except Exception:
+        return DEFAULT_RATE

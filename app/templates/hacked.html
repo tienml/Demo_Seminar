@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+
+{% block title %}BẠN ĐÃ CHIẾM ĐƯỢC QUYỀN ADMIN{% endblock %}
+
+{% block content %}
+<div class="glitch-stage">
+    <div class="skull">&#9760;</div>
+    <h1 class="glitch" data-text="ADMIN ACCESS GRANTED">ADMIN ACCESS GRANTED</h1>
+    <p class="genius">Bạn vừa chiếm quyền quản trị mà không cần mật khẩu.<br>Liệu bạn có phải thiên tài?!</p>
+</div>
+
+<section class="card breach-card">
+    <div class="breach-row">
+        <span>Payload đã dùng</span>
+        <code>{{ payload }}</code>
+    </div>
+    <div class="breach-row">
+        <span>Đăng nhập với tư cách</span>
+        <strong>{{ user.username }} ({{ user.role }})</strong>
+    </div>
+    <div class="breach-row">
+        <span>Mật khẩu đã nhập</span>
+        <strong>không cần &mdash; mệnh đề WHERE đã bị vô hiệu hoá</strong>
+    </div>
+</section>
+
+<section class="card leak-card">
+    <h2>Dữ liệu toàn bộ khách hàng đang bị lộ</h2>
+    <table class="leak-table">
+        <thead>
+            <tr><th>ID</th><th>Tài khoản</th><th>Họ tên</th><th>Số dư</th><th>Email</th></tr>
+        </thead>
+        <tbody>
+            {% for u in users %}
+            <tr>
+                <td>{{ u.id }}</td>
+                <td>{{ u.username }}</td>
+                <td>{{ u.fullname }}</td>
+                <td class="money">{{ "{:,}".format(u.balance) }} đ</td>
+                <td>{{ u.email }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    <p class="hint">
+        Đây chính là lỗ hổng mà AI sẽ tự phân tích và vá trong phần demo ngay sau đây.
+    </p>
+    <a class="btn btn-ghost" href="/">Quay lại trang đăng nhập</a>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>window.LABBANK_EFFECT = "breach";</script>
+{% endblock %}

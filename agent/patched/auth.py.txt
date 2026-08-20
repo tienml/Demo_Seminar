@@ -1,0 +1,89 @@
+"""Xác thực và tra cứu người dùng.
+
+Đã vá CWE-89 (SQL Injection).
+
+Trước đây hàm dựng câu lệnh nối thẳng chuỗi người dùng nhập vào SQL, nên
+`admin' OR '1'='1--` vô hiệu hoá được mệnh đề WHERE. Nay hàm trả về cặp
+(câu lệnh có placeholder, tham số); sqlite3 gửi phần dữ liệu đi theo đường
+riêng nên chuỗi tấn công chỉ còn là một tên đăng nhập không tồn tại.
+
+Bản vá chạm vào cả ba nơi gọi chung hàm dựng câu lệnh — đăng nhập, quên mật
+khẩu, và ô tìm kiếm trong trang quản trị — chứ không chỉ dòng mà công cụ quét
+chỉ ra.
+"""
+
+from .db import get_connection
+
+SQLI_PAYLOAD = "admin' OR '1'='1--"
+
+
+def _escape_like(value: str) -> str:
+    """Vô hiệu hoá ký tự đại diện của LIKE để từ khoá được so khớp nguyên văn."""
+    for ch in ("\\", "%", "_"):
+        value = value.replace(ch, "\\" + ch)
+    return value
+
+
+def build_user_query(username: str, password: str | None = None) -> tuple[str, tuple]:
+    """Trả về cặp (câu lệnh có placeholder, tham số)."""
+    if password is None:
+        return "SELECT * FROM users WHERE username = ?", (username,)
+    return (
+        "SELECT * FROM users WHERE username = ? AND password = ?",
+        (username, password),
+    )
+
+
+def authenticate(username: str, password: str):
+    """Đăng nhập. Call site #1 của build_user_query."""
+    conn = get_connection()
+    try:
+        sql, params = build_user_query(username, password)
+        row = conn.execute(sql, params).fetchone()
+        return dict(row) if row else None
+    except Exception:
+        return None
+    finally:
+        conn.close()
+
+
+def find_user_for_reset(username: str):
+    """Quên mật khẩu. Call site #2 của build_user_query."""
+    conn = get_connection()
+    try:
+        sql, params = build_user_query(username)
+        row = conn.execute(sql, params).fetchone()
+        return dict(row) if row else None
+    except Exception:
+        return None
+    finally:
+        conn.close()
+
+
+def admin_search(keyword: str):
+    """Ô tìm kiếm trong trang quản trị. Call site #3, cũng đã tham số hoá."""
+    conn = get_connection()
+    try:
+        rows = conn.execute(
+            "SELECT id, username, role, fullname, email FROM users "
+            "WHERE username LIKE ? ESCAPE '\\'",
+            (f"%{_escape_like(keyword)}%",),
+        ).fetchall()
+        return [dict(r) for r in rows]
+    except Exception:
+        return []
+    finally:
+        conn.close()
+
+
+def injection_succeeds() -> bool:
+    """Tự kiểm tra: thử chính payload SQLi lên hàm xác thực của ứng dụng.
+
+    Endpoint /version dùng hàm này để báo cáo ứng dụng đang ở trạng thái dính
+    lỗ hổng hay đã được vá. Nhờ vậy trạng thái là kết quả kiểm chứng thực tế
+    chứ không phải một cờ cấu hình được bật tay.
+    """
+    try:
+        return authenticate(SQLI_PAYLOAD, "bat_ky_mat_khau_nao") is not None
+    except Exception:
+        return False

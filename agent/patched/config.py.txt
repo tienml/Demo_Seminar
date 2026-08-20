@@ -1,0 +1,34 @@
+"""Cấu hình ứng dụng.
+
+Đã vá CWE-798 (Use of Hard-coded Credentials).
+
+Ba khoá bí mật trước đây nằm thẳng trong mã nguồn và đã đi vào lịch sử Git,
+nghĩa là ai clone repo cũng đọc được.
+
+Hai khoá dịch vụ (ADMIN_API_KEY, INTERNAL_WEBHOOK_TOKEN) bị gỡ hẳn khỏi module
+này thay vì chỉ đổi sang os.environ. Lý do: một hằng số cấp module chỉ được
+đọc đúng một lần lúc import, nên nó không thể nhận giá trị mới khi khoá được
+xoay vòng. Nơi cần khoá phải tự đọc biến môi trường tại thời điểm dùng.
+
+Lưu ý vận hành đi kèm bản vá: xoá khoá khỏi mã nguồn KHÔNG thu hồi được khoá
+cũ. Cả ba khoá đã lộ vẫn phải được thu hồi ở phía nhà cung cấp.
+"""
+
+import os
+
+APP_NAME = "LabBank"
+
+# Khoá ký cookie phiên. Giá trị mặc định cố tình mang tên nói rõ nó chỉ dành
+# cho máy phát triển, và phải giống nhau giữa các worker để phiên không đứt.
+SECRET_KEY = os.environ.get("FLASK_SECRET_KEY", "dev-only-insecure-change-me")
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DATABASE_PATH = os.path.join(BASE_DIR, "labbank.db")
+
+# Địa chỉ dịch vụ tỉ giá nội bộ (dùng ở app/external.py)
+RATE_SERVICE_URL = os.environ.get(
+    "RATE_SERVICE_URL", "https://api.exchangerate-api.com/v4/latest/USD"
+)
+
+# Đã vá CWE-693: bật các header bảo mật cho mọi phản hồi HTTP.
+ENABLE_SECURITY_HEADERS = True

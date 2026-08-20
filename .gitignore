@@ -1,0 +1,15 @@
+.venv/
+__pycache__/
+*.pyc
+*.db
+.env
+.pytest_cache/
+findings/*.local.sarif
+dashboard/state.json
+dashboard/index.html
+artifacts/pull_request.md
+node_modules/
+.playwright/
+
+# Bản sao lưu tạm của agent — chỉ tồn tại giữa lúc chạy demo và lúc reset.
+.demo-backup/

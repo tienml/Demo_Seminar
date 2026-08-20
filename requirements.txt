@@ -1,0 +1,5 @@
+Flask==3.0.3
+gunicorn==22.0.0
+# Cố ý ghim phiên bản dính CVE-2023-32681 (rò rỉ header Proxy-Authorization qua redirect).
+# Đây là "lỗ hổng tầng thư viện" mà Trivy/Grype sẽ bắt được ở stage SCA.
+requests==2.25.1

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}Truy cập bị từ chối{% endblock %}
+
+{% block content %}
+{% if was_attack %}
+<div class="shield-stage">
+    <div class="shield">&#128737;</div>
+    <h1 class="secure-title">TẤN CÔNG ĐÃ BỊ CHẶN</h1>
+    <p class="genius">
+        Vẫn là payload đó. Vẫn là địa chỉ web đó.<br>
+        Nhưng lần này lỗ hổng đã không còn tồn tại.
+    </p>
+</div>
+
+<section class="card patched-card">
+    <div class="breach-row">
+        <span>Payload đã dùng</span>
+        <code>{{ payload }}</code>
+    </div>
+    <div class="breach-row">
+        <span>Kết quả</span>
+        <strong class="ok">401 Unauthorized</strong>
+    </div>
+    <div class="breach-row">
+        <span>Nguyên nhân</span>
+        <strong>Truy vấn đã được tham số hoá &mdash; chuỗi tấn công bị coi là dữ liệu thường</strong>
+    </div>
+    <div class="patch-note">
+        Bản vá này do AI agent tự phân tích, tự viết, tự kiểm thử, và được con người
+        phê duyệt trước khi triển khai lên chính hệ thống bạn đang truy cập.
+    </div>
+    <a class="btn btn-ghost" href="/">Quay lại trang đăng nhập</a>
+</section>
+{% else %}
+<section class="card login-card">
+    <h1 class="headline">Sai tên đăng nhập hoặc mật khẩu</h1>
+    <p class="sub">Vui lòng thử lại.</p>
+    <a class="btn btn-primary" href="/">Quay lại</a>
+</section>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>window.LABBANK_EFFECT = {{ "\"patched\"" if was_attack else "\"plain\"" }};</script>
+{% endblock %}

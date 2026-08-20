@@ -1,0 +1,165 @@
+name: DevSecOps Pipeline
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  secrets:
+    name: 1 · Secrets — Gitleaks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Quét secret bị commit
+        continue-on-error: true
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "true"
+
+  sast:
+    name: 2 · SAST — Semgrep
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+      - name: Quét mã nguồn tĩnh
+        continue-on-error: true
+        run: |
+          semgrep scan \
+            --config .semgrep.yml \
+            --config p/security-audit \
+            --config p/python \
+            --sarif --output semgrep.sarif \
+            --metrics off
+      - name: Đưa kết quả lên tab Security
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: semgrep.sarif
+          category: semgrep
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sarif-semgrep
+          path: semgrep.sarif
+
+  sca:
+    name: 3 · SCA + SBOM — Trivy & Syft
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Quét lỗ hổng thư viện
+        continue-on-error: true
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-fs.sarif
+          severity: CRITICAL,HIGH,MEDIUM
+      - name: Sinh SBOM chuẩn CycloneDX
+        continue-on-error: true
+        uses: anchore/sbom-action@v0
+        with:
+          path: .
+          format: cyclonedx-json
+          artifact-name: sbom.cyclonedx.json
+      - name: Đưa kết quả lên tab Security
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-fs.sarif
+          category: trivy-fs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sarif-trivy-fs
+          path: trivy-fs.sarif
+
+  container:
+    name: 4 · Container — Hadolint & Trivy image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Kiểm tra Dockerfile
+        continue-on-error: true
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+          format: sarif
+          output-file: hadolint.sarif
+          no-fail: true
+      - name: Đưa kết quả lên tab Security
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: hadolint.sarif
+          category: hadolint
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sarif-hadolint
+          path: hadolint.sarif
+
+  iac:
+    name: 5 · IaC — Checkov
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Quét cấu hình hạ tầng
+        continue-on-error: true
+        uses: bridgecrewio/checkov-action@master
+        with:
+          directory: infra
+          framework: terraform
+          output_format: sarif
+          output_file_path: ./
+          soft_fail: true
+      - name: Đưa kết quả lên tab Security
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: results.sarif
+          category: checkov
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: sarif-checkov
+          path: results.sarif
+
+  tests:
+    name: 6 · Test — chức năng & bảo mật
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: pip install -r requirements.txt pytest
+      - name: Test chức năng (phải xanh)
+        run: pytest tests/test_functional.py -q
+      - name: Test bảo mật (đỏ cho tới khi được vá)
+        id: sectest
+        continue-on-error: true
+        run: pytest tests/test_security.py -q
+      - name: Ghi kết luận vào Job Summary
+        if: always()
+        run: |
+          echo "## Kết quả kiểm thử" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.sectest.outcome }}" = "success" ]; then
+            echo "✅ Test bảo mật ĐÃ XANH — lỗ hổng đã được vá." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ Test bảo mật ĐỎ — ứng dụng vẫn khai thác được." >> $GITHUB_STEP_SUMMARY
+          fi

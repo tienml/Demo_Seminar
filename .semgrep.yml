@@ -1,0 +1,69 @@
+# Bộ luật tự viết cho demo. Dùng kèm bộ luật cộng đồng `p/security-audit`.
+# Mục đích: đảm bảo pipeline luôn bắt được đúng các lỗ hổng đã cài, không phụ
+# thuộc vào việc registry của Semgrep có đổi luật hay không.
+
+rules:
+  - id: labbank-sql-string-concat
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Câu truy vấn SQL được dựng bằng nối chuỗi từ dữ liệu người dùng.
+      Kẻ tấn công có thể chèn cú pháp SQL và vô hiệu hoá mệnh đề WHERE.
+      Hãy dùng truy vấn tham số hoá (placeholder ?) thay vì nối chuỗi.
+    metadata:
+      cwe: "CWE-89: SQL Injection"
+      owasp: "A03:2021 - Injection"
+      confidence: HIGH
+    patterns:
+      - pattern-either:
+          - pattern: |
+              "$...SQL" + $VAR
+          - pattern: |
+              $Q += "..." + $VAR
+      - pattern-regex: (?i)(select|insert|update|delete)\s
+
+  - id: labbank-sqlite-execute-non-parameterized
+    languages: [python]
+    severity: ERROR
+    message: >-
+      execute() nhận vào một chuỗi đã được dựng sẵn thay vì cặp (câu lệnh, tham số).
+      Đây là dấu hiệu trực tiếp của SQL Injection.
+    metadata:
+      cwe: "CWE-89: SQL Injection"
+      confidence: HIGH
+    patterns:
+      - pattern: $CONN.execute($BUILDER(...))
+
+  - id: labbank-hardcoded-secret
+    languages: [python]
+    severity: ERROR
+    message: >-
+      Khoá bí mật được nhúng cứng trong mã nguồn và commit lên Git.
+      Hãy chuyển sang biến môi trường hoặc kho quản lý bí mật.
+    metadata:
+      cwe: "CWE-798: Use of Hard-coded Credentials"
+      owasp: "A07:2021 - Identification and Authentication Failures"
+      confidence: HIGH
+    pattern-regex: (?i)(secret_key|api_key|webhook_token)\s*=\s*["'](sk_live_|ghp_|labbank-)[^"']+["']
+
+  - id: labbank-missing-authorization-check
+    languages: [python]
+    severity: WARNING
+    message: >-
+      Endpoint trả về dữ liệu của một bản ghi theo id lấy từ URL nhưng không
+      kiểm tra người gọi có quyền với bản ghi đó không (IDOR).
+    metadata:
+      cwe: "CWE-639: Authorization Bypass Through User-Controlled Key"
+      owasp: "A01:2021 - Broken Access Control"
+      confidence: MEDIUM
+    patterns:
+      - pattern: |
+          @$APP.get("/api/user/<int:user_id>/profile")
+          def $FUNC(user_id):
+            ...
+      - pattern-not: |
+          @$APP.get("/api/user/<int:user_id>/profile")
+          def $FUNC(user_id):
+            ...
+            session.get(...)
+            ...

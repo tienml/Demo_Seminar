@@ -1,0 +1,27 @@
+# Blueprint cho Render (gói Free, không cần thẻ tín dụng).
+#
+# Chỉ có DUY NHẤT một service, nghĩa là duy nhất một địa chỉ web và duy nhất
+# một mã QR cho cả buổi seminar. Đầu buổi địa chỉ này chạy bản dính lỗ hổng,
+# cuối buổi vẫn là địa chỉ đó nhưng đã chạy bản vá.
+#
+# Tắt autoDeploy để việc triển khai do pipeline quyết định, sau khi đi qua
+# cổng phê duyệt của con người.
+
+services:
+  - type: web
+    name: labbank-demo
+    runtime: python
+    plan: free
+    region: singapore
+    branch: main
+    autoDeploy: false
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --bind 0.0.0.0:$PORT --workers 2 --timeout 60 app.main:app
+    healthCheckPath: /healthz
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.6"
+      - key: ADMIN_API_KEY
+        sync: false
+      - key: FLASK_SECRET_KEY
+        sync: false
