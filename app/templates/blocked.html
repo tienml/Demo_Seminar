@@ -42,5 +42,8 @@
 {% endblock %}
 
 {% block scripts %}
-<script>window.LABBANK_EFFECT = {{ "\"patched\"" if was_attack else "\"plain\"" }};</script>
+{# tojson thay vì tự nối dấu nháy: Jinja bật autoescape cho .html nên một chuỗi
+   thường sẽ bị đổi thành &#34;patched&#34; và dòng JS này hỏng cú pháp, khiến
+   hiệu ứng pháo giấy ở cuối buổi lặng lẽ không chạy. #}
+<script>window.LABBANK_EFFECT = {{ ("patched" if was_attack else "plain") | tojson }};</script>
 {% endblock %}

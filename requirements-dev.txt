@@ -1,0 +1,18 @@
+# Công cụ dành cho người trình bày, KHÔNG phải phụ thuộc của ứng dụng.
+#
+# Cố tình tách khỏi requirements.txt vì hai lý do:
+#   1. requirements.txt là tệp mà agent sẽ vá ở bản vá SCA (requests 2.25.1 →
+#      2.32.3). Thêm thứ khác vào đó chỉ làm nhiễu diff chiếu lên màn hình.
+#   2. Render build từ requirements.txt; container chạy production không cần
+#      pytest hay thư viện sinh mã QR.
+#
+# Cài:  pip install -r requirements-dev.txt
+
+pytest==8.3.3
+
+# Sinh mã QR cho scripts/make_qr.py. Thuần Python, không kéo theo phụ thuộc nào.
+segno==1.6.6
+
+# Tuỳ chọn — quét IaC ngay trên máy Windows mà không cần Docker.
+# Bỏ dấu # ở dòng dưới nếu muốn scripts/scan_local.py có kết quả thật của Checkov.
+# checkov==3.2.257

@@ -1,0 +1,8 @@
+# Kho mã này được viết trên Windows nhưng chạy trên Linux (GitHub Actions runner,
+# container Render). Ép LF trong blob để runner và Docker nhận đúng byte, tránh
+# lỗi khó truy kiểu "\r: command not found" ngay giữa buổi demo.
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.db binary
