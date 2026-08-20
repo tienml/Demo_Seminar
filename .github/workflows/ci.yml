@@ -58,9 +58,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Tag của trivy-action bắt buộc có tiền tố "v". Thiếu chữ v thì Actions
+      # không phân giải nổi action và job chết ngay ở "Set up job" — lúc đó
+      # continue-on-error bên dưới không cứu được, vì bước còn chưa kịp chạy.
       - name: Quét lỗ hổng thư viện
         continue-on-error: true
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
