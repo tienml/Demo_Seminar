@@ -13,3 +13,10 @@ node_modules/
 
 # Bản sao lưu tạm của agent — chỉ tồn tại giữa lúc chạy demo và lúc reset.
 .demo-backup/
+
+# Mã QR sinh theo địa chỉ thật của lần deploy. Không commit, vì một tệp qr.png
+# cũ nằm trong repo là cái bẫy đúng nghĩa: nó trông hợp lệ nhưng trỏ về địa chỉ
+# của buổi trước. Luôn chạy lại scripts/make_qr.py trước mỗi buổi.
+artifacts/qr.png
+artifacts/qr.svg
+artifacts/qr_slide.html
