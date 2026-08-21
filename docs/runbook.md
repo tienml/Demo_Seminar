@@ -26,7 +26,7 @@ Kiểm tra ba thứ, mỗi thứ mất mười giây:
 D:\Seminar-DevSecOps\tools\bin\gh.exe auth status
 ```
 
-`pytest` đúng phải là **37 xanh, 6 đỏ**. Sáu đỏ nằm ở `tests/test_security.py`, cố
+`pytest` đúng phải là **43 xanh, 6 đỏ**. Sáu đỏ nằm ở `tests/test_security.py`, cố
 tình đỏ cho tới khi vá xong. Nếu thấy con số khác thì có gì đó đã đổi.
 
 **Đừng mở `~/.claude/settings.json` và đừng gõ `/config` khi đang chiếu màn hình.**
@@ -134,10 +134,15 @@ Chi tiết ở [prompts/02b-chot-chan-chinh-sach.md](prompts/02b-chot-chan-chinh
 
 ```
 .\.venv\Scripts\python.exe .claude\hooks\chan_vi_pham.py --quet app\
-git add app\transfer.py
-git commit -m "them tinh nang chuyen tien"
-git reset
+.\.venv\Scripts\python.exe scripts\dien_2b.py --dung
+git commit -m "them tim kiem nguoi nhan"
+.\.venv\Scripts\python.exe scripts\dien_2b.py --don
 ```
+
+`dien_2b.py --dung` thêm hai hàm vi phạm thật vào `app/transfer.py` rồi stage sẵn.
+Cần bước này vì `app/transfer.py` **đã được commit** trên nhánh này, nên
+`git add` một file không đổi thì chốt không có gì để soi — chốt chỉ soi file đang
+được đưa vào commit, đúng như thiết kế.
 
 Commit bị chặn, in ra ba vi phạm kèm số hiệu mục chính sách. Điểm đáng nói: chốt
 này không quan tâm mã đến từ đâu — AI sinh, IDE gợi ý hay gõ tay đều qua cùng một
@@ -147,9 +152,12 @@ Tự nói ra giới hạn trước khi bị hỏi: đây là so khớp mẫu, b�
 nhưng không bắt được một hàm tính tiền sai đặt tên khác. Đó là lý do cần cả hai
 lớp — regex không bao giờ mệt, AI đọc được ý định nhưng không tất định.
 
-**Chưa kiểm chứng:** hook `PreToolUse` của Claude Code không kích hoạt ở chế độ
-headless và tôi chưa xác nhận được nó chạy trong phiên tương tác. Nếu chưa kịp
-kiểm tra thì chỉ diễn phần git, đừng nói gì về hook của Claude Code.
+**Hook `PreToolUse` của Claude Code: đã kiểm chứng là chặn thật** trong phiên tương
+tác (mã thoát 2, `[§4.1] dùng float cho tiền`, file không được tạo). Ở chế độ
+headless `claude -p` thì nó không kích hoạt — nếu diễn thì diễn trong phiên tương
+tác. Cách phân biệt hook chặn với mô hình tự từ chối, và beat "chốt chặn tự báo
+nhầm rồi được sửa", nằm ở
+[prompts/02b](prompts/02b-chot-chan-chinh-sach.md).
 
 ## Chặng 3 · Kiểm thử — đỏ trước xanh sau — 5 phút
 

@@ -86,6 +86,26 @@ PHAI_CHO_QUA = [
     ),
     ("Decimal cho tiền", 'so_tien = Decimal(str(than.get("amount", "0")))'),
     ("float cho thứ không phải tiền", 'ty_le = float(cau_hinh.get("ty_le", 0))'),
+    (
+        # Ca báo nhầm đã gặp thật trong một phiên Claude Code tương tác: hook
+        # chặn đúng một docstring đang DẶN đừng viết như vậy. Chú thích không
+        # phải mã chạy được.
+        "docstring dặn đừng dùng float",
+        '"""Ghi chu noi bo cho doi LB-214.\n'
+        "\n"
+        '    KHONG duoc viet: int(float(than["amount"]) * 100)\n'
+        "    Phai dung so nguyen don vi xu.\n"
+        '    """\n',
+    ),
+    (
+        "chú thích # dặn đừng dùng float",
+        "# KHONG duoc viet float(amount), phai dung Decimal\nx = 1\n",
+    ),
+    (
+        "chú thích # nhắc tới SQL nối chuỗi",
+        '# Dung: SELECT * FROM users WHERE ten = \'" + ten + "\'\n'
+        'conn.execute("SELECT * FROM users WHERE ten = ?", (ten,))\n',
+    ),
 ]
 
 
@@ -113,6 +133,37 @@ def test_khong_bao_nham_ma_dung(ten, ma):
 )
 def test_pham_vi_chi_gom_ma_ung_dung(duong, trong):
     assert chan_vi_pham.trong_pham_vi(duong) is trong
+
+
+# Lọc chú thích không được làm hỏng hai thứ: chuỗi ba nháy gán cho biến vẫn là
+# mã thật, và mã vi phạm nằm cạnh một docstring vô hại vẫn phải bị bắt.
+CHUOI_KHONG_PHAI_DOCSTRING = [
+    (
+        "SCHEMA gán chuỗi ba nháy, cột tiền REAL",
+        'SCHEMA = """CREATE TABLE transfers (amount REAL NOT NULL);"""',
+        "cột tiền kiểu REAL",
+    ),
+    (
+        "docstring vô hại đứng cạnh mã vi phạm",
+        '"""Doc noi float(amount) la sai."""\nx = float(amount_minor)\n',
+        "dùng float cho tiền",
+    ),
+]
+
+
+@pytest.mark.parametrize(
+    "ten,ma,luat",
+    CHUOI_KHONG_PHAI_DOCSTRING,
+    ids=[t for t, _, _ in CHUOI_KHONG_PHAI_DOCSTRING],
+)
+def test_loc_chu_thich_khong_lam_bo_sot(ten, ma, luat):
+    assert luat in [v[0] for v in chan_vi_pham.soi(ma)], f"bỏ sót: {ten}"
+
+
+def test_van_ban_hong_cu_phap_van_soi_duoc():
+    """Edit thường ghi một đoạn rời chưa hợp cú pháp — không được vì thế mà im."""
+    doan_roi = '    so_tien = int(float(than["amount"]) * 100)\n    return so_tien'
+    assert chan_vi_pham.soi(doan_roi)
 
 
 def _goi_hook(duong: str, noi_dung: str) -> int:

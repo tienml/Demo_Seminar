@@ -24,9 +24,12 @@ Mỗi mẫu dưới đây đều bám vào một dấu hiệu hẹp và đã có
 from __future__ import annotations
 
 import argparse
+import ast
+import io
 import json
 import re
 import sys
+import tokenize
 from pathlib import Path
 
 # Chỉ soi mã ứng dụng. Test và script diễn được phép chứa payload tấn công, chuỗi
@@ -91,9 +94,97 @@ LUAT = [
 ]
 
 
+def _vi_tri_dau_dong(van_ban: str) -> list[int]:
+    """Bảng tra: dòng thứ n (đếm từ 1) bắt đầu ở ký tự thứ mấy."""
+    vi_tri = [0, 0]
+    for dong in van_ban.splitlines(keepends=True):
+        vi_tri.append(vi_tri[-1] + len(dong))
+    return vi_tri
+
+
+def _khoang_docstring(van_ban: str) -> list[tuple[int, int, int, int]]:
+    """Vị trí của các docstring THẬT — không phải mọi chuỗi ba nháy.
+
+    Phân biệt này là toàn bộ điểm khó. ``SCHEMA = \"\"\"CREATE TABLE ... amount
+    REAL\"\"\"`` cũng là chuỗi ba nháy nhưng là mã có tác dụng thật và phải bị
+    chặn. Chỉ câu lệnh chuỗi đứng đầu module/hàm/lớp mới là docstring, và chỉ
+    cây cú pháp phân biệt được — regex thì không.
+    """
+    try:
+        cay = ast.parse(van_ban)
+    except (SyntaxError, ValueError):
+        return []
+
+    khoang = []
+    for nut in ast.walk(cay):
+        if not isinstance(
+            nut, (ast.Module, ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)
+        ):
+            continue
+        than = getattr(nut, "body", None) or []
+        if not than:
+            continue
+        dau = than[0]
+        if (
+            isinstance(dau, ast.Expr)
+            and isinstance(dau.value, ast.Constant)
+            and isinstance(dau.value.value, str)
+            and dau.end_lineno is not None
+        ):
+            khoang.append(
+                (dau.lineno, dau.col_offset, dau.end_lineno, dau.end_col_offset)
+            )
+    return khoang
+
+
+def _khoang_chu_thich(van_ban: str) -> list[tuple[int, int, int, int]]:
+    """Vị trí của các chú thích ``#``. Bỏ qua êm nếu văn bản chưa hợp cú pháp."""
+    khoang = []
+    try:
+        for tk in tokenize.generate_tokens(io.StringIO(van_ban).readline):
+            if tk.type == tokenize.COMMENT:
+                khoang.append((tk.start[0], tk.start[1], tk.end[0], tk.end[1]))
+    except (tokenize.TokenError, IndentationError, SyntaxError, ValueError):
+        pass
+    return khoang
+
+
+def bo_chu_thich(van_ban: str) -> str:
+    """Xoá chú thích và docstring trước khi soi luật, giữ nguyên độ dài và số dòng.
+
+    Vì sao cần: một câu dặn *"KHÔNG được viết ``float(amount)``"* nằm trong
+    docstring không phải mã chạy được. Chặn nó là chặn nhầm, và chính file này
+    đặt nguyên tắc thà bỏ sót còn hơn chặn nhầm (xem đầu file). Đây là ca báo
+    nhầm đã gặp thật: hook chặn đúng một chú thích đang dặn *đừng* làm điều đó.
+
+    Đánh đổi phải nói ra: mã vi phạm bị cố tình giấu trong chú thích rồi
+    ``exec`` ra thì lớp này bỏ sót. Đó là cái giá của việc không báo nhầm, và là
+    lý do vẫn cần lớp AI đọc ý định ở trên.
+
+    Văn bản chưa hợp cú pháp (thường gặp khi Edit ghi một đoạn rời) thì trả về
+    gần như nguyên trạng — vẫn soi được, chỉ là không lọc được chú thích.
+    """
+    khoang = _khoang_docstring(van_ban) + _khoang_chu_thich(van_ban)
+    if not khoang:
+        return van_ban
+
+    dau_dong = _vi_tri_dau_dong(van_ban)
+    ky_tu = list(van_ban)
+    for dong_dau, cot_dau, dong_cuoi, cot_cuoi in khoang:
+        if dong_cuoi >= len(dau_dong):
+            continue
+        bat_dau = dau_dong[dong_dau] + cot_dau
+        ket_thuc = dau_dong[dong_cuoi] + cot_cuoi
+        for i in range(bat_dau, min(ket_thuc, len(ky_tu))):
+            if ky_tu[i] != "\n":
+                ky_tu[i] = " "
+    return "".join(ky_tu)
+
+
 def soi(van_ban: str) -> list[tuple[str, str, str, str]]:
+    sach = bo_chu_thich(van_ban)
     return [(ten, muc, vi_sao, sua)
-            for ten, mau, muc, vi_sao, sua in LUAT if mau.search(van_ban)]
+            for ten, mau, muc, vi_sao, sua in LUAT if mau.search(sach)]
 
 
 def trong_pham_vi(duong: str) -> bool:
