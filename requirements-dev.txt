@@ -13,6 +13,12 @@ pytest==8.3.3
 # Sinh mã QR cho scripts/make_qr.py. Thuần Python, không kéo theo phụ thuộc nào.
 segno==1.6.6
 
+# Điều khiển trình duyệt thật ở chặng cuối: agent tự mở Chromium, phóng payload
+# lên ứng dụng đã triển khai, chụp ảnh trước và sau khi vá. Dùng selector chứ
+# không dùng toạ độ chuột, nên không hỏng khi đổi độ phân giải máy chiếu.
+# Sau khi cài phải tải browser một lần:  python -m playwright install chromium
+playwright==1.62.0
+
 # Tuỳ chọn — quét IaC ngay trên máy Windows mà không cần Docker.
 # Bỏ dấu # ở dòng dưới nếu muốn scripts/scan_local.py có kết quả thật của Checkov.
 # checkov==3.2.257

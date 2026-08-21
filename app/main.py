@@ -18,7 +18,7 @@ from flask import (
     url_for,
 )
 
-from . import __version__, config, db
+from . import __version__, config, db, transfer
 from .auth import SQLI_PAYLOAD, admin_search, authenticate, injection_succeeds
 
 
@@ -28,6 +28,8 @@ def create_app() -> Flask:
     app.config["APP_NAME"] = config.APP_NAME
 
     db.init_db()
+    transfer.init_transfer_tables()
+    app.register_blueprint(transfer.bp)
 
     # ------------------------------------------------------------------
     # LỖ HỔNG CỐ Ý #6 — thiếu security headers.

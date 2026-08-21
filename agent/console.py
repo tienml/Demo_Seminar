@@ -175,9 +175,22 @@ def checkpoint(done: str, nxt: str) -> None:
         raise SystemExit(130)
 
 
+def _o(gia_tri: object, rong: int) -> str:
+    """Ép một ô vừa đúng bề rộng cột.
+
+    ljust() một mình không đủ: nội dung do AI trả về có thể dài hơn cột và khi
+    đó nó đẩy các cột sau dính vào nhau. Cắt kèm dấu … để người xem biết là còn
+    nữa, chừa một khoảng trắng làm vách ngăn với cột kế tiếp.
+    """
+    van_ban = str(gia_tri)
+    if len(van_ban) > rong - 1:
+        van_ban = van_ban[: max(1, rong - 2)] + "…"
+    return van_ban.ljust(rong)
+
+
 def table(headers: list[str], rows: list[list[str]], widths: list[int]) -> None:
-    head = "  " + "".join(h.ljust(w) for h, w in zip(headers, widths))
+    head = "  " + "".join(_o(h, w) for h, w in zip(headers, widths))
     line(head, GREY + BOLD, delay=0.05)
     line("  " + "─" * sum(widths), GREY, delay=0.05)
     for row in rows:
-        line("  " + "".join(str(c).ljust(w) for c, w in zip(row, widths)), delay=0.09)
+        line("  " + "".join(_o(c, w) for c, w in zip(row, widths)), delay=0.09)

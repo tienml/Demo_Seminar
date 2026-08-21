@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python .claude/hooks/chan_vi_pham.py",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}
