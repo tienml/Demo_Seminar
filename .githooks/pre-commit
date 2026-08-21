@@ -1,0 +1,44 @@
+#!/bin/sh
+# Chốt chặn chính sách ở tầng git — chặn commit chứa mã vi phạm CLAUDE.md.
+#
+# Vì sao tồn tại song song với hook của Claude Code: hook PreToolUse chỉ chạy
+# trong phiên Claude Code, và đã đo được là KHÔNG kích hoạt ở chế độ headless
+# (claude -p). Chốt này thì chạy với mọi cách sinh mã — AI, IDE, gõ tay, copy
+# từ StackOverflow — nên nó mới là chốt thật.
+#
+# Bật (chạy một lần cho mỗi bản sao repo):
+#     git config core.hooksPath .githooks
+# Hoặc không đổi cấu hình:
+#     cp .githooks/pre-commit .git/hooks/pre-commit
+#
+# Bỏ qua có chủ đích khi thật sự cần:
+#     git commit --no-verify
+# Theo §1, lần bỏ qua đó phải nêu lý do trong thân commit.
+
+set -e
+
+if [ -x ".venv/Scripts/python.exe" ]; then
+    PY=".venv/Scripts/python.exe"
+elif [ -x ".venv/bin/python" ]; then
+    PY=".venv/bin/python"
+else
+    PY="python"
+fi
+
+# Chỉ soi file đang được đưa vào commit, không soi cả cây mã. Lỗi có sẵn từ
+# trước không được chặn người đang sửa một chỗ khác.
+FILES=$(git diff --cached --name-only --diff-filter=ACM -- 'app/*.py')
+
+if [ -z "$FILES" ]; then
+    exit 0
+fi
+
+# shellcheck disable=SC2086
+if ! PYTHONIOENCODING=utf-8 "$PY" .claude/hooks/chan_vi_pham.py --quet $FILES; then
+    echo ""
+    echo "Commit bị chặn. Sửa vi phạm rồi commit lại, hoặc dùng --no-verify kèm"
+    echo "lý do ghi trong thân commit nếu đây là ngoại lệ có chủ đích."
+    exit 1
+fi
+
+exit 0

@@ -1,0 +1,374 @@
+{
+  "task": "plan_review_khong_chinh_sach",
+  "ghi_luc": "2026-08-21T16:24:55",
+  "model": "claude-sonnet-5",
+  "prompt_sha": "58c33aa0ad427cf3",
+  "ket_qua": {
+    "phat_hien": [
+      {
+        "ma": "F1",
+        "tieu_de": "Khong kiem tra quyen so huu tai khoan nguon",
+        "muc_ke_hoach": "§3.4, §4",
+        "quy_tac": null,
+        "cwe": "CWE-639",
+        "muc_do": "nghiêm trọng",
+        "ly_do": "API nhan `from_account` tu body do client kiem soat, va buoc 4 chi kiem tra tai khoan CO TON TAI chu khong kiem tra no thuoc ve nguoi dung dang dang nhap. Ke tan cong dang nhap bang tai khoan cua chinh minh roi doi `from_account` thanh so tai khoan cua nguoi khac (lay tu o goi y o §3.2) de rut tien tuy y; phan hoi con tra ve `new_balance` de xac nhan.",
+        "thanh_ma_gi": "Handler se lay account tu `req.body.from_account`, query `SELECT * FROM accounts WHERE account_no = ?` roi UPDATE truc tiep, khong bao gio doi chieu voi `session.user_id`. Day la loi bo sot mac dinh khi tham so nghiep vu duoc lay tu payload thay vi tu ngu canh xac thuc.",
+        "cach_sua": "Bo `from_account` khoi request body; suy ra tai khoan nguon tu phien dang nhap, hoac neu bat buoc nhan tu client thi phai co buoc kiem tra quyen so huu bat buoc (`WHERE account_no = ? AND owner_user_id = ?`) truoc moi thao tac, tra 403 khi khong khop."
+      },
+      {
+        "ma": "F2",
+        "tieu_de": "Khong xac thuc gia tri so tien chuyen",
+        "muc_ke_hoach": "§3.3, §4, §5",
+        "quy_tac": null,
+        "cwe": "CWE-20",
+        "muc_do": "nghiêm trọng",
+        "ly_do": "Ke hoach khong he dat rang buoc `amount > 0`, khong gioi han tran, khong quy dinh so chu so thap phan, va cot `amount REAL` khong co CHECK constraint. Gui `amount: -5000000` se dao chieu dong tien: tru so am o tai khoan nguon (tuc cong tien) va cong so am o dich, dong thoi vuot qua duoc buoc kiem tra so du o §3.5 mot cach hop le.",
+        "thanh_ma_gi": "Code se viet `balance_from = balance_from - amount` va `balance_to = balance_to + amount` ma khong co guard nao, nen moi gia tri am, 0, NaN, Infinity hoac chuoi ep kieu duoc deu di thang vao SQL UPDATE.",
+        "cach_sua": "Quy dinh ro: amount la so nguyen duong theo don vi nho nhat, co tran moi giao dich, so chu so thap phan co dinh, tu choi NaN/Infinity/chuoi; them `CHECK (amount > 0)` vao lu do va rang buoc `CHECK (balance >= 0)` tren bang accounts."
+      },
+      {
+        "ma": "F3",
+        "tieu_de": "Dung kieu so thuc REAL de luu tien",
+        "muc_ke_hoach": "§4, §5",
+        "quy_tac": null,
+        "cwe": "CWE-1339",
+        "muc_do": "cao",
+        "ly_do": "`amount REAL` va JSON float (1500000.50) la so dau phay dong nhi phan, khong bieu dien chinh xac phan le thap phan. Sai so lam tron tich luy qua nhieu giao dich tao ra tien tu sinh hoac bien mat, va ke tan cong co the khai thac co y bang cac so nhu 0.005 hoac gia tri gan gioi han chinh xac de bao mon so du.",
+        "thanh_ma_gi": "So du se duoc doc ra float, tinh toan bang float, ghi lai bang float; 0.1 + 0.2 != 0.3 khien tong so du he thong lech dan va khong con doi chieu duoc voi so ke toan.",
+        "cach_sua": "Chuyen sang so nguyen theo don vi nho nhat (vi du dong, luu INTEGER/BIGINT) hoac DECIMAL co do chinh xac co dinh o ca API, tang tinh toan va lu do; cam moi phep toan tien bang float."
+      },
+      {
+        "ma": "F4",
+        "tieu_de": "Khong co khoa idempotency, chong trung o client",
+        "muc_ke_hoach": "§6",
+        "quy_tac": null,
+        "cwe": "CWE-602",
+        "muc_do": "cao",
+        "ly_do": "Ke hoach ghi ro lan bam thu hai duoc xu ly nhu mot yeu cau moi, va bien phap duy nhat la khoa nut o giao dien. Client la moi truong khong tin cay: ke tan cong (hoac chi don gian la retry cua proxy/mang) gui lai request N lan se tao N giao dich chuyen tien that.",
+        "thanh_ma_gi": "Server khong co cot unique nao de chan lap, nen moi POST lai chay lai nguyen ven khoi transaction o §3.6 va tao them mot ban ghi transfers cong voi mot lan tru tien.",
+        "cach_sua": "Bat buoc header `Idempotency-Key` do client sinh, luu thanh cot UNIQUE trong bang transfers, va tra ve ket qua cu (cung transfer_id) khi gap key da xu ly thay vi thuc hien lai."
+      },
+      {
+        "ma": "F5",
+        "tieu_de": "Thieu khoa hang: dua tranh kiem tra so du",
+        "muc_ke_hoach": "§3.5, §3.6",
+        "quy_tac": null,
+        "cwe": "CWE-367",
+        "muc_do": "cao",
+        "ly_do": "Ke hoach dat ba thao tac ghi trong mot transaction nhung khong quy dinh muc co lap hay khoa hang cho buoc DOC so du o §3.5. O muc co lap mac dinh (READ COMMITTED), nhieu request song song deu doc thay so du du roi deu tru, gay am so du (khai thac kinh dien: gui dong thoi 50 request chuyen toan bo so du).",
+        "thanh_ma_gi": "Code se la `SELECT balance ...` roi `if (balance >= amount)` roi `UPDATE ... SET balance = balance - amount`, tuc kiem tra o tang ung dung tren du lieu da cu vao thoi diem ghi.",
+        "cach_sua": "Quy dinh dung UPDATE co dieu kien nguyen tu (`UPDATE accounts SET balance = balance - :amt WHERE id = :id AND balance >= :amt` va kiem tra so hang bi anh huong), hoac SELECT ... FOR UPDATE theo thu tu id co dinh de tranh deadlock; neu ro muc co lap yeu cau."
+      },
+      {
+        "ma": "F6",
+        "tieu_de": "Khong co xac thuc buoc hai khi chuyen tien",
+        "muc_ke_hoach": "§3, §4",
+        "quy_tac": null,
+        "cwe": "CWE-308",
+        "muc_do": "cao",
+        "ly_do": "Luong chi yeu cau da dang nhap la co the chuyen tien ngay, khong OTP, khong xac nhan lai mat khau, khong buoc review nguoi nhan truoc khi commit. Mot phien bi chiem (cookie bi trom, may bi de mo, XSS o F13) tro thanh quyen rut sach tai khoan ma khong co rao can thu hai nao.",
+        "thanh_ma_gi": "Endpoint se chi co mot middleware `requireLogin`, khong co state trung gian nao giua nhap lieu va ghi so — khong co ban ghi `pending_transfer` hay token xac nhan de kiem chung y chi nguoi dung.",
+        "cach_sua": "Them buoc xac nhan phia server: tao giao dich trang thai `pending`, yeu cau OTP hoac xac thuc lai gan voi dung so tien va so tai khoan dich, chi commit khi xac nhan hop le va con hieu luc."
+      },
+      {
+        "ma": "F7",
+        "tieu_de": "Khong neu bien phap chong CSRF",
+        "muc_ke_hoach": "§4",
+        "quy_tac": null,
+        "cwe": "CWE-352",
+        "muc_do": "cao",
+        "ly_do": "Day la endpoint doi trang thai tai chinh nhung thiet ke khong noi gi ve co che xac thuc hay chong CSRF. Neu phien dua tren cookie (mac dinh cho giao dien web mot trang o §2), mot trang web doc gui form hoac fetch keo cookie cua nan nhan se chuyen tien ma khong can doc phan hoi.",
+        "thanh_ma_gi": "Route se dang ky don gian la `app.post('/api/transfer', requireLogin, handler)` — khong co kiem tra CSRF token, khong kiem Origin/Sec-Fetch-Site, khong khai bao SameSite cho cookie phien.",
+        "cach_sua": "Neu ro co che xac thuc; neu dung cookie thi bat buoc CSRF token dong bo hoa + `SameSite=Strict` + kiem tra Origin, chi chap nhan Content-Type application/json va tu choi request kieu form."
+      },
+      {
+        "ma": "F8",
+        "tieu_de": "Khong co rate limit va han muc giao dich",
+        "muc_ke_hoach": "§3, §4",
+        "quy_tac": null,
+        "cwe": "CWE-770",
+        "muc_do": "cao",
+        "ly_do": "Khong co gioi han so giao dich/phut, khong han muc theo ngay, khong tran moi lan chuyen. Ke tan cong co quyen truy cap ngan han vao mot phien co the rut sach tai khoan trong mot loat request, va o goi y ten o §3.2 co the bi quet hang loat de thu thap du lieu khach hang.",
+        "thanh_ma_gi": "Handler khong co bo dem nao gan voi user_id hay IP, nen vong lap script goi endpoint hang tram lan/giay deu duoc phuc vu binh thuong.",
+        "cach_sua": "Quy dinh han muc tang: so request/phut theo user va theo IP, tran moi giao dich, tran tich luy theo ngay, va nguong rieng cho nguoi nhan moi; vuot nguong tra 429 va sinh canh bao."
+      },
+      {
+        "ma": "F9",
+        "tieu_de": "Ghi so tai khoan va so the vao log",
+        "muc_ke_hoach": "§7",
+        "quy_tac": null,
+        "cwe": "CWE-532",
+        "muc_do": "nghiêm trọng",
+        "ly_do": "Dinh dang log ghi day du `from`, `to`, `card` va `note` duoi dang van ban thuan. Log thuong duoc luu tru, day sang he thong tap trung va cho phep nhieu nguoi doc hon co so du lieu, nen day la duong ro ri du lieu the va PII ra ngoai vong kiem soat, chua ke rui ro tuan thu PCI-DSS.",
+        "thanh_ma_gi": "Se co mot dong `logger.info('[TRANSFER] ... card=%s ...', card_number)` trong handler, va so the that nam trong file log, trong stdout container, trong he thong log tap trung, vinh vien.",
+        "cach_sua": "Bo hoan toan truong `card` khoi log; che so tai khoan (chi 4 so cuoi); khong ghi `note`; tra soat bang cach log `transfer_id` roi tra cuu du lieu nhay cam qua he thong co kiem soat truy cap va audit."
+      },
+      {
+        "ma": "F10",
+        "tieu_de": "Truong note cho phep gia mao dong log",
+        "muc_ke_hoach": "§7",
+        "quy_tac": null,
+        "cwe": "CWE-117",
+        "muc_do": "trung bình",
+        "ly_do": "`note` la van ban tu do do khach nhap va duoc noi thang vao dinh dang log mot dong. Nhap note chua ky tu xuong dong cong mot dong `[TRANSFER] ...` gia se chen ban ghi khong ton tai vao log, pha hoai chinh cai ma §7 noi la de tra soat khieu nai.",
+        "thanh_ma_gi": "Chuoi format `%s` se nhan nguyen van CR/LF va ky tu dieu khien, tao nhieu dong log tu mot su kien; neu log duoc parse tu dong thi ca pipeline giam sat bi dau doc.",
+        "cach_sua": "Chuyen sang log co cau truc (JSON) voi escaping, va loai bo/thay the ky tu dieu khien cung gioi han do dai truoc khi luu hoac ghi log truong `note`."
+      },
+      {
+        "ma": "F11",
+        "tieu_de": "SQL injection o o goi y ten nguoi nhan",
+        "muc_ke_hoach": "§3.2",
+        "quy_tac": null,
+        "cwe": "CWE-89",
+        "muc_do": "nghiêm trọng",
+        "ly_do": "Ke hoach dac ta truy van dang `LIKE '%tên%'`, tuc mo ta o dang chuoi da noi san — day chinh la khuon mau dan den noi chuoi trong code. Chuoi tim kiem nhu `%' UNION SELECT ... --` se doc duoc bang accounts, bang the hoac bang nguoi dung.",
+        "thanh_ma_gi": "Lap trinh vien se viet `\"... WHERE name LIKE '%\" + q + \"%'\"` vi dat placeholder giua hai dau `%` khong hien nhien; wildcard trong ke hoach truc tiep khuyen khich noi chuoi.",
+        "cach_sua": "Ghi ro trong ke hoach: dung prepared statement voi tham so hoa ca mau wildcard (`LIKE ?` voi gia tri `%q%`), escape `%` va `_` trong dau vao, gioi han do dai va tap ky tu cho phep."
+      },
+      {
+        "ma": "F12",
+        "tieu_de": "O goi y cho liet ke danh sach khach hang",
+        "muc_ke_hoach": "§3.2",
+        "quy_tac": null,
+        "cwe": "CWE-200",
+        "muc_do": "cao",
+        "ly_do": "Tra cuu ten tren toan bo bang accounts bang khop chuoi con cho phep bat ky khach hang nao quet dan ten va so tai khoan cua moi khach hang khac (nhap `a`, `b`, ... la du de gom phan lon danh ba). Du lieu nay vua la PII vua la nguyen lieu cho F1 va cho gian lan giao dich.",
+        "thanh_ma_gi": "Endpoint goi y se la mot SELECT khong co bo loc pham vi nao ngoai chuoi tim kiem, tra ve ca so tai khoan day du de giao dien dien san vao form; ngoai ra `LIKE '%x%'` khong dung duoc index nen con la don DoS re tien.",
+        "cach_sua": "Chi goi y trong danh ba nguoi nhan da luu cua chinh nguoi dung; neu can tra ten thi doi so tai khoan chinh xac roi tra ve ten da che mot phan de xac nhan, kem rate limit chat va khong tra ve so tai khoan chua che."
+      },
+      {
+        "ma": "F13",
+        "tieu_de": "Note khong gioi han va khong ma hoa dau ra",
+        "muc_ke_hoach": "§3.3, §5, §2",
+        "quy_tac": null,
+        "cwe": "CWE-79",
+        "muc_do": "cao",
+        "ly_do": "`note` la `TEXT` khong gioi han, khong quy dinh tap ky tu, va theo §2 se duoc hien thi lai trong lich su giao dich cua ca hai ben. Ke tan cong chuyen 1 dong kem note chua the script se thuc thi ma trong trinh duyet nguoi nhan, dan den chiem phien va — do khong co F6 — chuyen tien tu dong.",
+        "thanh_ma_gi": "Template lich su se render `{{note}}` chua escape (hoac dung innerHTML), va khong co gioi han do dai nen con cho phep nhoi du lieu lam phong bang.",
+        "cach_sua": "Gioi han do dai (vi du 140 ky tu) va tap ky tu cho phep tai tang server, bat buoc ma hoa dau ra theo ngu canh khi render, va them Content-Security-Policy cho trang lich su."
+      },
+      {
+        "ma": "F14",
+        "tieu_de": "Phan hoi 404 tro thanh oracle do tai khoan",
+        "muc_ke_hoach": "§6",
+        "quy_tac": null,
+        "cwe": "CWE-204",
+        "muc_do": "trung bình",
+        "ly_do": "Tra ve 404 rieng cho truong hop tai khoan dich khong ton tai cho phep do tuan tu khong gian so tai khoan de xac dinh tai khoan nao that su ton tai, khong can dat lenh chuyen tien nao thanh cong. Ket hop voi F8 (khong rate limit) thi quet toan bo la kha thi.",
+        "thanh_ma_gi": "Handler se co nhanh `if (!toAccount) return res.status(404)`, tach biet ro rang voi cac loi khac, tao khac biet quan sat duoc tu ben ngoai.",
+        "cach_sua": "Tra ve cung mot ma loi va thong diep chung cho moi truong hop tai khoan dich khong dung duoc (khong ton tai, dong, phong toa), kem rate limit va lam phang thoi gian phan hoi."
+      },
+      {
+        "ma": "F15",
+        "tieu_de": "Khong kiem trang thai tai khoan va tu chuyen",
+        "muc_ke_hoach": "§3.4",
+        "quy_tac": null,
+        "cwe": "CWE-841",
+        "muc_do": "trung bình",
+        "ly_do": "Buoc 4 chi kiem tra ton tai. Khong kiem tai khoan da dong, bi phong toa, chua hoan tat KYC, khong kiem `from_account != to_account`, khong loai tru cac tai khoan noi bo/ky thuat cua ngan hang, va khong kiem dinh dang so tai khoan. Tien co the chay vao hoac ra khoi tai khoan dang bi chan, hoac vao tai khoan he thong.",
+        "thanh_ma_gi": "Dieu kien se chi la `SELECT 1 FROM accounts WHERE account_no = ?`; tu chuyen (from == to) con co the tao ket qua la o mot so cach cai dat (doc hai lan roi ghi hai lan lam mat hoac nhan doi tien).",
+        "cach_sua": "Bo sung vao ke hoach danh sach dieu kien bat buoc: dinh dang so tai khoan, trang thai active cua ca hai ben, from != to, va chan cac loai tai khoan khong duoc phep nhan chuyen tu khach."
+      },
+      {
+        "ma": "F16",
+        "tieu_de": "Thieu vet kiem toan va so ke toan bat bien",
+        "muc_ke_hoach": "§5",
+        "quy_tac": null,
+        "cwe": "CWE-778",
+        "muc_do": "trung bình",
+        "ly_do": "Bang transfers khong luu ai la nguoi thuc hien (user_id), IP, thiet bi, trang thai giao dich, loai tien, va so du duoc sua truc tiep tren bang accounts khong kem so ke toan kep. Khi co tranh chap hoac khi mot ke tan cong da khai thac F1, khong the chung minh giao dich do ai khoi tao, cung khong the doi chieu so du voi tong bien dong.",
+        "thanh_ma_gi": "Code se chi INSERT dung 5 truong da khai bao; moi du lieu dieu tra con lai nam o log van ban khong dang tin cay (xem F10) hoac khong ton tai.",
+        "cach_sua": "Them vao lu do: actor_user_id, ip, user_agent, status, currency, idempotency_key UNIQUE, khoa ngoai tro accounts; ghi bien dong so du duoi dang ban ghi ledger chi-them, khong sua/xoa."
+      },
+      {
+        "ma": "F17",
+        "tieu_de": "Ma giao dich tuan tu, de doan",
+        "muc_ke_hoach": "§4, §5",
+        "quy_tac": null,
+        "cwe": "CWE-340",
+        "muc_do": "thấp",
+        "ly_do": "`TRF-000123` sinh tu INTEGER AUTOINCREMENT nen doan duoc toan bo ma giao dich lan can. Neu co bat ky endpoint tra cuu chi tiet giao dich theo ma (rat kha nang se them de phuc vu §2), day thanh duong doc giao dich cua nguoi khac va con tiet lo khoi luong giao dich cua ngan hang.",
+        "thanh_ma_gi": "Ma se duoc dinh dang tu khoa chinh tu tang, va handler tra cuu se nhan `transfer_id` roi query truc tiep khong kiem quyen so huu.",
+        "cach_sua": "Dung dinh danh khong doan duoc (UUIDv4/ULID) cho ma cong khai, giu khoa tu tang chi de dung noi bo, va bat buoc kiem quyen so huu tren moi endpoint tra cuu giao dich."
+      },
+      {
+        "ma": "F18",
+        "tieu_de": "Khong yeu cau HTTPS va chong cache",
+        "muc_ke_hoach": "§4",
+        "quy_tac": null,
+        "cwe": "CWE-319",
+        "muc_do": "trung bình",
+        "ly_do": "Thiet ke API khong noi gi ve TLS, HSTS hay chong luu cache, trong khi request chua so tai khoan va phan hoi chua so du. Neu co bat ky duong HTTP nao con nghe, ke tan cong o cung mang doc duoc noi dung va cookie phien; phan hoi chua so du con co the bi trinh duyet hoac proxy trung gian luu lai.",
+        "thanh_ma_gi": "Server se duoc mo cong HTTP de tien test roi giu nguyen khi len production, va phan hoi khong co header `Cache-Control: no-store`.",
+        "cach_sua": "Ghi ro trong ke hoach: chi phuc vu qua HTTPS, chuyen huong/tu choi HTTP, bat HSTS, cookie `Secure` + `HttpOnly` + `SameSite`, va `Cache-Control: no-store` cho moi phan hoi chua so du hoac so tai khoan."
+      },
+      {
+        "ma": "F19",
+        "tieu_de": "Khong co cua chan bao mat truoc khi len production",
+        "muc_ke_hoach": "§8, §9",
+        "quy_tac": null,
+        "cwe": "CWE-693",
+        "muc_do": "trung bình",
+        "ly_do": "Ke hoach kiem thu chi co bon ca duong di thuan lam an, khong co ca nao ve phan quyen, so tien am, dong thoi hay injection; §9 lai trien khai thang len production sau khi test chuc nang dat, khong staging, khong ra soat bao mat, khong phuong an rollback. Nghia la moi phat hien tu F1 den F18 se len production ma khong co buoc nao chan lai.",
+        "thanh_ma_gi": "Bo test se chi phu duong di thanh cong, nen mot handler thieu kiem tra quyen so huu van xanh toan bo CI va duoc merge.",
+        "cach_sua": "Bo sung vao §8 cac ca kiem thu tieu cuc/bao mat tuong ung tung phat hien va dua chung thanh dieu kien chan deploy; §9 them staging, ra soat bao mat truoc phat hanh, co tat khan cap phia server va phuong an rollback."
+      },
+      {
+        "ma": "F20",
+        "tieu_de": "Khong co giam sat gian lan va duong dao giao dich",
+        "muc_ke_hoach": "§2, §6, §7",
+        "quy_tac": null,
+        "cwe": "CWE-778",
+        "muc_do": "trung bình",
+        "ly_do": "Giao dich hoan tat ngay, khong the huy (ngoai pham vi o §2), va khong co canh bao bat thuong nao — log chi de nguoi tra soat khi khach da khieu nai. Ke tan cong khai thac F1 co the rut nhieu tai khoan ma khong he sinh tin hieu, va khong ton tai co che thu hoi tien.",
+        "thanh_ma_gi": "He thong se khong co job/hook nao doc luong giao dich de danh gia rui ro; khac phuc su co se phai lam bang cau UPDATE thu cong tren production, pha vo vet kiem toan.",
+        "cach_sua": "Them yeu cau: canh bao thoi gian thuc theo nguong (so tien, tan suat, nguoi nhan moi) va mot quy trinh dao giao dich tao ban ghi bu tru co phe duyet, thay vi sua so du truc tiep."
+      }
+    ],
+    "khong_phai_phat_hien": [
+      {
+        "muc": "§3.6 — ba thao tac tru/cong/ghi so trong cung mot transaction, loi thi rollback toan bo",
+        "ly_do": "Day la yeu cau dung va can thiet: bao dam tinh nguyen to nen khong xay ra truong hop tru tien ma khong cong, hoac cong tien ma khong co ban ghi. Toi da can nhac va khong tinh la phat hien; rieng phan thieu khoa hang/muc co lap la mot van de khac va da duoc tach thanh F5."
+      },
+      {
+        "muc": "§6 — loi co so du lieu tra 500, rollback transaction va ghi log",
+        "ly_do": "Xu ly dung: khong tra chi tiet loi ky thuat ra client, giu nguyen tinh nhat quan du lieu bang rollback, va van luu lai dau vet de dieu tra. Chi can bo sung yeu cau khong lo stack trace, nhung thiet ke hien tai khong vi pham."
+      },
+      {
+        "muc": "§3.4 — kiem tra tai khoan dich co ton tai truoc khi chuyen",
+        "ly_do": "Buoc kiem tra nay dung huong: ngan tien di vao dinh danh khong ton tai va tao trang thai treo. Phan con thieu la kiem tra trang thai va tu chuyen, da tach thanh F15; ban than viec kiem tra ton tai khong phai loi."
+      },
+      {
+        "muc": "§4 — dung POST cho thao tac doi trang thai",
+        "ly_do": "Dung phuong thuc: tranh duoc viec tham so tai chinh nam trong URL (roi ri qua log truy cap, header Referer, lich su trinh duyet) va tranh side effect bi kich hoat boi prefetch hay cache."
+      },
+      {
+        "muc": "§2 — danh sach ngoai pham vi ro rang (lien ngan hang, theo lich hen)",
+        "ly_do": "Gioi han pham vi tuong minh la diem cong ve bao mat: giam be mat tan cong cua ban phat hanh dau va tranh viec cac luong phuc tap hon duoc cai dat nua voi. Rieng viec loai bo hoan toan duong huy/dao giao dich thi co hau qua bao mat va da duoc neu o F20."
+      },
+      {
+        "muc": "§6 — thong diep so du khong du tra ve cho chinh chu tai khoan",
+        "ly_do": "Khong phai ro ri thong tin: sau khi F1 duoc sua, nguoi goi luon la chu tai khoan nguon nen ho von da biet so du cua minh. Thong diep cu the o day co gia tri su dung va khong tao oracle cho ben thu ba."
+      },
+      {
+        "muc": "§9 — mo dan cho 10% khach hang trong tuan dau",
+        "ly_do": "Phat hanh theo giai doan la thuc hanh tot, gioi han ban kinh anh huong khi co su co. Van de nam o cho thieu cua chan bao mat truoc do va thieu cong tat khan cap, khong nam o ban than viec phat hanh dan."
+      }
+    ],
+    "con_nguoi_quyet": [
+      "Ngan hang co dang chiu rang buoc phap ly nao ve xac thuc manh cho chuyen tien (vi du yeu cau xac thuc sinh trac hoc/OTP tren mot nguong so tien nhat dinh) — khong co tai lieu chinh sach kem theo nen khong xac dinh duoc nguong cu the phai ap.",
+      "Nguong han muc moi giao dich, moi ngay va nguong canh bao gian lan la quyet dinh ve muc do chap nhan rui ro cua nghiep vu, khong suy ra duoc tu ban ke hoach.",
+      "Co che xac thuc hien co cua he thong la cookie phien hay bearer token — dieu nay quyet dinh F7 co bat buoc hay khong, va ban ke hoach khong noi.",
+      "So the lien ket co that su can cho quy trinh tra soat hay khong, va he thong co nam trong pham vi PCI-DSS hay khong — can doi chieu voi doi van hanh va doi the.",
+      "Lu do §5 dung cu phap SQLite (AUTOINCREMENT, REAL); day la co so du lieu production that hay chi la gia ma — anh huong lon den kha nang bao dam khoa hang va dong thoi o F5.",
+      "He thong co san he thong giam sat gian lan/AML nao da phu luong nay chua, va nghia vu bao cao giao dich dang ngo la gi.",
+      "Da co quy trinh back-office nao de dao/hoan giao dich chua; neu co thi F20 chi can dau noi, neu chua thi phai xay moi.",
+      "He thong co da tien te hay khong — neu co, viec thieu truong currency o §5 la lo hong nghiem trong; neu chi mot tien te thi la no ky thuat.",
+      "Thoi gian luu tru log, ai duoc quyen doc log va log co duoc chuyen sang ben thu ba nao khong — can chinh sach du lieu de ket luan muc do anh huong cua F9.",
+      "Co che chon 10% khach hang o §9 duoc quyet o server hay o client, va co the bi nguoi dung tu bat khong."
+    ],
+    "tieu_chi_nghiem_thu": [
+      {
+        "ma": "AC-1",
+        "noi_dung": "POST /api/transfer voi from_account khong thuoc nguoi dung dang dang nhap tra 403; khong co ban ghi moi trong transfers va so du ca hai tai khoan khong doi.",
+        "phat_hien": "F1"
+      },
+      {
+        "ma": "AC-2",
+        "noi_dung": "Voi amount thuoc {-1, 0, 0.001, chuoi khong phai so, null, NaN, Infinity, gia tri vuot tran cau hinh} thi API tra 400 va khong tao ban ghi transfers nao.",
+        "phat_hien": "F2"
+      },
+      {
+        "ma": "AC-3",
+        "noi_dung": "Kieu cot amount va truong so du la so nguyen hoac decimal (khong phai REAL/float); sau 10.000 giao dich gia tri nho lien tiep, tong so du toan he thong bang chinh xac gia tri ban dau.",
+        "phat_hien": "F3"
+      },
+      {
+        "ma": "AC-4",
+        "noi_dung": "Gui lai cung mot request voi cung Idempotency-Key nhieu lan chi tao dung mot ban ghi transfers va moi phan hoi tra ve cung transfer_id; thieu Idempotency-Key thi tra 400.",
+        "phat_hien": "F4"
+      },
+      {
+        "ma": "AC-5",
+        "noi_dung": "50 request dong thoi chuyen toan bo so du tu cung mot tai khoan: dung mot request thanh cong, so du cuoi khong am, tong bien dong khop voi so ban ghi transfers thanh cong.",
+        "phat_hien": "F5"
+      },
+      {
+        "ma": "AC-6",
+        "noi_dung": "Request chuyen tien khong kem token xac nhan/OTP hop le tra 401 hoac 403; token da dung mot lan, het han, hoac gan voi so tien/tai khoan dich khac deu bi tu choi.",
+        "phat_hien": "F6"
+      },
+      {
+        "ma": "AC-7",
+        "noi_dung": "Request co cookie phien hop le nhung thieu hoac sai CSRF token, hoac co header Origin khac origin cua ung dung, tra 403; request Content-Type dang form bi tu choi.",
+        "phat_hien": "F7"
+      },
+      {
+        "ma": "AC-8",
+        "noi_dung": "Vuot so request/phut theo user hoac IP tra 429; vuot tran moi giao dich hoac tran tich luy theo ngay tra loi tu choi va khong tao ban ghi transfers.",
+        "phat_hien": "F8"
+      },
+      {
+        "ma": "AC-9",
+        "noi_dung": "Sau mot giao dich thanh cong, quet toan bo dau ra log: khong xuat hien so tai khoan day du, khong xuat hien so the duoi bat ky dinh dang nao, khong xuat hien noi dung truong note.",
+        "phat_hien": "F9"
+      },
+      {
+        "ma": "AC-10",
+        "noi_dung": "Giao dich co note chua ky tu xuong dong va chuoi gia dang tien to log sinh ra dung mot ban ghi log; moi ky tu dieu khien bi escape va log parse duoc thanh dung mot su kien.",
+        "phat_hien": "F10"
+      },
+      {
+        "ma": "AC-11",
+        "noi_dung": "Truy van goi y voi cac payload injection (bao gom chuoi chua dau nhay don, UNION SELECT, va cac ky tu wildcard % va _) khong gay loi SQL, khong tra ve du lieu ngoai pham vi, va tra ve dung ket qua khop van ban thuan.",
+        "phat_hien": "F11"
+      },
+      {
+        "ma": "AC-12",
+        "noi_dung": "Endpoint goi y chi tra ve nguoi nhan trong danh ba da luu cua nguoi dung dang dang nhap; tra cuu ten tu do ngoai danh ba tra ve rong hoac 403, va phan hoi khong chua so tai khoan chua che.",
+        "phat_hien": "F12"
+      },
+      {
+        "ma": "AC-13",
+        "noi_dung": "note vuot do dai gioi han tra 400; note chua payload HTML/script duoc luu nguyen van va khi render trong lich su giao dich cua ca hai ben thi hien ra duoi dang van ban da escape, khong thuc thi.",
+        "phat_hien": "F13"
+      },
+      {
+        "ma": "AC-14",
+        "noi_dung": "Cac truong hop tai khoan dich khong ton tai, da dong, va bi phong toa tra ve cung ma HTTP va cung thong diep; do lech thoi gian phan hoi giua cac truong hop nam trong nguong da dinh.",
+        "phat_hien": "F14"
+      },
+      {
+        "ma": "AC-15",
+        "noi_dung": "from_account bang to_account tra 400; tai khoan nguon hoac dich o trang thai khong active tra loi tu choi; so tai khoan sai dinh dang tra 400; tai khoan noi bo cua ngan hang khong nhan duoc chuyen tu khach.",
+        "phat_hien": "F15"
+      },
+      {
+        "ma": "AC-16",
+        "noi_dung": "Moi giao dich thanh cong sinh cac ban ghi ledger no/co khop nhau va co day du actor_user_id, ip, user_agent, status, currency; tong ledger cua mot tai khoan bang dung so du hien tai; thu UPDATE/DELETE tren ban ghi ledger bi tu choi.",
+        "phat_hien": "F16"
+      },
+      {
+        "ma": "AC-17",
+        "noi_dung": "100 transfer_id sinh lien tiep khong theo thu tu doan duoc (kiem tra dinh dang UUID/ULID va tinh khong lien tiep); truy cap chi tiet mot transfer_id khong thuoc nguoi dung tra 403 hoac 404.",
+        "phat_hien": "F17"
+      },
+      {
+        "ma": "AC-18",
+        "noi_dung": "Truy cap qua HTTP bi chuyen huong hoac tu choi; phan hoi co header HSTS; moi phan hoi chua so du hoac so tai khoan co Cache-Control: no-store; cookie phien co Secure, HttpOnly va SameSite.",
+        "phat_hien": "F18"
+      },
+      {
+        "ma": "AC-19",
+        "noi_dung": "Pipeline CI chan deploy khi bat ky tieu chi AC-1 den AC-18 that bai, va co buoc quet bao mat tu dong; co bat/tat tinh nang duoc doc o server va co the tat mot lenh ma khong can phat hanh lai.",
+        "phat_hien": "F19"
+      },
+      {
+        "ma": "AC-20",
+        "noi_dung": "Thao tac dao giao dich tao ban ghi bu tru moi va khong sua/xoa ban ghi goc; chuoi giao dich vuot nguong bat thuong da cau hinh sinh dung mot canh bao co the kiem chung trong test.",
+        "phat_hien": "F20"
+      }
+    ]
+  }
+}

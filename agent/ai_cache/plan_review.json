@@ -1,0 +1,259 @@
+{
+  "task": "plan_review",
+  "ghi_luc": "2026-08-21T15:50:08",
+  "model": "claude-sonnet-5",
+  "prompt_sha": "ef58ce3f3fc3f554",
+  "ket_qua": {
+    "phat_hien": [
+      {
+        "ma": "F1",
+        "tieu_de": "Không kiểm tra quyền sở hữu tài khoản nguồn",
+        "muc_ke_hoach": "§3.4 (luồng nghiệp vụ), §4 (thân yêu cầu có from_account)",
+        "quy_tac": "§3.1, §3.2",
+        "cwe": "CWE-639",
+        "muc_do": "nghiêm trọng",
+        "ly_do": "Bản kế hoạch chỉ kiểm tra tài khoản nguồn và đích 'có tồn tại', và nhận from_account từ thân yêu cầu do client gửi. Một khách đã đăng nhập có thể đổi from_account thành số tài khoản của người khác và rút tiền của người đó sang tài khoản mình; số tài khoản là dữ liệu dễ đoán và đã bị lộ thêm qua ô gợi ý ở §3.2.",
+        "thanh_ma_gi": "Hàm xử lý sẽ viết dạng SELECT * FROM accounts WHERE account_no = ? rồi kiểm tra rowcount, hoàn toàn không tham chiếu tới danh tính phiên; câu lệnh trừ tiền sẽ dùng thẳng payload['from_account'].",
+        "cach_sua": "Bỏ from_account khỏi hợp đồng API, lấy tài khoản nguồn từ phiên phía server; nếu buộc phải nhận thì thêm bước xác minh chủ sở hữu (account.owner_id == session.user_id) và trả 403 khi lệch."
+      },
+      {
+        "ma": "F2",
+        "tieu_de": "Thiếu khoá idempotency cho giao dịch chuyển tiền",
+        "muc_ke_hoach": "§6 (xử lý lỗi), §4 (hợp đồng API), §5 (lược đồ transfers)",
+        "quy_tac": "§4.2",
+        "cwe": "CWE-837",
+        "muc_do": "nghiêm trọng",
+        "ly_do": "Bản kế hoạch ghi rõ lần bấm lại được 'xử lý như một yêu cầu mới'. Người dùng bấm lại khi mạng chậm, hoặc kẻ tấn công phát lại nguyên gói yêu cầu, sẽ tạo nhiều giao dịch trừ tiền trùng lặp mà không có cách nào nhận ra là trùng.",
+        "thanh_ma_gi": "Endpoint không nhận header Idempotency-Key, bảng transfers không có cột khoá và không có ràng buộc UNIQUE, nên mỗi lần gọi sẽ INSERT một bản ghi mới và trừ tiền thêm một lần.",
+        "cach_sua": "Bắt buộc client sinh idempotency key gửi kèm; thêm cột idempotency_key vào transfers với ràng buộc UNIQUE theo tài khoản nguồn, và trả về kết quả của lần xử lý đầu tiên khi khoá trùng."
+      },
+      {
+        "ma": "F3",
+        "tieu_de": "Không kiểm tra số tiền dương và chặn trên",
+        "muc_ke_hoach": "§3.5, §4 (trường amount), §6 (bảng lỗi)",
+        "quy_tac": "§4.3",
+        "cwe": "CWE-20",
+        "muc_do": "nghiêm trọng",
+        "ly_do": "Bản kế hoạch chỉ kiểm tra số dư có đủ hay không, không có bất kỳ ràng buộc nào về dấu, giá trị không hoặc mức tối đa. Gửi amount âm sẽ đảo chiều dòng tiền: trừ số âm ở tài khoản nguồn tức là cộng tiền cho kẻ tấn công và rút tiền của tài khoản đích, đồng thời vẫn qua được bước kiểm tra số dư.",
+        "thanh_ma_gi": "Mã sẽ chỉ có một nhánh if balance < amount: return 400, còn phép trừ và phép cộng thực hiện với giá trị amount thô lấy từ JSON.",
+        "cach_sua": "Bổ sung vào kế hoạch điều kiện amount > 0, khác không, không quá hạn mức mỗi giao dịch và mỗi ngày, kèm mã lỗi 400 tương ứng cho từng vi phạm."
+      },
+      {
+        "ma": "F4",
+        "tieu_de": "Tiền dùng số thực ở API và cột REAL",
+        "muc_ke_hoach": "§4 ('amount nhận kiểu số thực', new_balance 3499999.50), §5 (amount REAL NOT NULL)",
+        "quy_tac": "§4.1",
+        "cwe": "CWE-681",
+        "muc_do": "cao",
+        "ly_do": "Số thực dấu phẩy động không biểu diễn chính xác phần lẻ thập phân, nên tổng phát sinh sai lệch tích luỹ giữa số bị trừ và số được cộng. Kẻ tấn công có thể chọn giá trị gây làm tròn có lợi và lặp lại nhiều lần để bòn rút phần dư.",
+        "thanh_ma_gi": "Mã sẽ dùng float(payload['amount']) và ghi vào cột REAL; các phép so sánh số dư sẽ là so sánh float, sinh ra khác biệt kiểu 0.1 + 0.2 != 0.3.",
+        "cach_sua": "Đổi hợp đồng API sang số nguyên theo đơn vị nhỏ nhất (xu) hoặc chuỗi thập phân xử lý bằng Decimal; đổi cột amount sang INTEGER hoặc NUMERIC và ghi rõ đơn vị."
+      },
+      {
+        "ma": "F5",
+        "tieu_de": "Ô gợi ý tên dựng SQL bằng nối chuỗi LIKE",
+        "muc_ke_hoach": "§3.2 (ô gợi ý tra cứu theo tên bằng LIKE '%tên%')",
+        "quy_tac": "§2.1, §2.2",
+        "cwe": "CWE-89",
+        "muc_do": "cao",
+        "ly_do": "Bản kế hoạch viết mẫu tìm kiếm dưới dạng chuỗi có nhúng giá trị người dùng, tức là chỉ định sẵn cách dựng câu lệnh bằng nối chuỗi. Ô gợi ý nhận dữ liệu tự do chưa xác thực đầy đủ, cho phép chèn UNION hoặc điều kiện luôn đúng để đọc số dư và số tài khoản của toàn bộ khách hàng.",
+        "thanh_ma_gi": "Mã sẽ thành f\"SELECT ... WHERE owner_name LIKE '%{q}%'\" trong một hàm tìm kiếm dùng chung, và mọi nơi gọi hàm đó đều thừa hưởng lỗ hổng.",
+        "cach_sua": "Ghi rõ trong kế hoạch rằng mẫu LIKE phải truyền qua tham số (LIKE ? với giá trị f'%{q}%' bind vào), thoát ký tự % và _, và tập trung tại một hàm truy vấn duy nhất kèm danh sách nơi gọi."
+      },
+      {
+        "ma": "F6",
+        "tieu_de": "Log ghi số thẻ và số tài khoản đầy đủ",
+        "muc_ke_hoach": "§7 (định dạng log có card=%s, from=%s, to=%s, amount=%s)",
+        "quy_tac": "§6.1",
+        "cwe": "CWE-532",
+        "muc_do": "cao",
+        "ly_do": "Kế hoạch chủ động yêu cầu ghi đầy đủ số thẻ liên kết và số tài khoản hai đầu vào log vận hành. Log thường được sao chép sang hệ thống tập trung, phân quyền rộng hơn hệ thống lõi, nên bất kỳ ai đọc được log đều thu hoạch được dữ liệu thẻ đủ để lạm dụng.",
+        "thanh_ma_gi": "Mã sẽ có một dòng logger.info với định dạng đúng như bản kế hoạch, kéo thêm truy vấn lấy số thẻ chỉ để phục vụ việc ghi log.",
+        "cach_sua": "Bỏ hoàn toàn trường card khỏi log, che số tài khoản chỉ giữ bốn số cuối, và không ghi số dư đầy đủ; nếu cần đối chiếu thẻ thì dùng mã tham chiếu nội bộ không phải số thẻ."
+      },
+      {
+        "ma": "F7",
+        "tieu_de": "Không có dấu vết kiểm toán cho giao dịch tiền",
+        "muc_ke_hoach": "§7 (chỉ một dòng log gỡ lỗi), §5 (lược đồ không có cột định danh người thực hiện, IP, kết quả)",
+        "quy_tac": "§6.2",
+        "cwe": "CWE-778",
+        "muc_do": "trung bình",
+        "ly_do": "Kế hoạch coi một dòng log vận hành là đủ, trong khi bảng transfers không lưu ai thực hiện, từ địa chỉ nào và kết quả ra sao. Khi xảy ra chiếm dụng tài khoản, không có dữ liệu nào để dựng lại chuỗi hành vi hay chứng minh giao dịch nào là gian lận, và log gỡ lỗi có thể bị luân chuyển hoặc xoá.",
+        "thanh_ma_gi": "Bảng transfers chỉ có from_account, to_account, amount, note, created_at; các giao dịch bị từ chối không để lại bản ghi nào vì đã rollback cùng transaction.",
+        "cach_sua": "Bổ sung bản ghi kiểm toán bền vững (actor_user_id, ip, user_agent, kết quả thành công/thất bại kèm lý do, thời điểm) ghi cả cho trường hợp bị từ chối, tách khỏi log gỡ lỗi."
+      },
+      {
+        "ma": "F8",
+        "tieu_de": "Endpoint chuyển tiền không giới hạn tần suất",
+        "muc_ke_hoach": "§4 (thiết kế API), §6 (xử lý lỗi không có mã 429)",
+        "quy_tac": "§7.1",
+        "cwe": "CWE-307",
+        "muc_do": "cao",
+        "ly_do": "Bản kế hoạch không nhắc tới giới hạn tần suất cho POST /api/transfer. Kẻ tấn công chiếm được phiên có thể bơm hàng nghìn lệnh chuyển nhỏ để vét sạch số dư trước khi hệ thống phát hiện, và ô gợi ý tên cũng bị lạm dụng để dò danh sách khách hàng.",
+        "thanh_ma_gi": "Route sẽ được khai báo trần, không có decorator giới hạn và không có nhánh trả 429, nên mỗi yêu cầu đều đi thẳng xuống tầng dữ liệu.",
+        "cach_sua": "Ghi vào kế hoạch giới hạn tần suất theo cả user/tài khoản và địa chỉ IP cho /api/transfer và endpoint gợi ý tên, kèm mã phản hồi 429 trong bảng xử lý lỗi."
+      },
+      {
+        "ma": "F9",
+        "tieu_de": "Kiểm tra số dư và trừ tiền không nguyên tử",
+        "muc_ke_hoach": "§3.5 và §3.6 (kiểm tra số dư ở bước 5, trừ tiền ở bước 6)",
+        "quy_tac": "§4.4",
+        "cwe": "CWE-367",
+        "muc_do": "cao",
+        "ly_do": "Kế hoạch tách bước đọc số dư khỏi bước cập nhật và không nói gì về khoá hàng hay cập nhật có điều kiện. Hai yêu cầu chuyển tiền gửi đồng thời đều đọc được số dư cũ và đều vượt qua kiểm tra, dẫn tới chi vượt số dư — kết hợp với F2 thì chỉ cần phát lại yêu cầu song song là khai thác được.",
+        "thanh_ma_gi": "Mã sẽ là SELECT balance ... rồi if balance >= amount: UPDATE accounts SET balance = balance - amount, không có SELECT ... FOR UPDATE, không có điều kiện WHERE balance >= amount, không có ràng buộc CHECK chống số dư âm.",
+        "cach_sua": "Quy định trong kế hoạch việc khoá hàng tài khoản theo thứ tự cố định (hoặc UPDATE có điều kiện WHERE balance >= amount và kiểm tra số hàng bị ảnh hưởng), kèm ràng buộc CHECK balance >= 0 ở tầng lược đồ."
+      },
+      {
+        "ma": "F10",
+        "tieu_de": "Không quy định header bảo mật và cờ cookie",
+        "muc_ke_hoach": "§4 (thiết kế API), §3.1 (trang web mới)",
+        "quy_tac": "§8.1, §8.2",
+        "cwe": "CWE-693",
+        "muc_do": "trung bình",
+        "ly_do": "Kế hoạch thêm một trang nhập liệu và một endpoint biến đổi trạng thái nhưng không nêu bốn header bắt buộc cũng như cờ HttpOnly/Secure/SameSite cho cookie phiên. Thiếu SameSite thì trang của kẻ tấn công có thể tự gửi lệnh chuyển tiền kèm cookie của nạn nhân; thiếu HttpOnly thì một lỗi XSS đủ để lấy phiên.",
+        "thanh_ma_gi": "Route mới sẽ trả JSON không qua middleware header nào, và phần cấu hình phiên giữ nguyên mặc định của framework.",
+        "cach_sua": "Ghi rõ trong kế hoạch rằng trang và endpoint mới đi qua middleware đặt đủ bốn header, cookie phiên bật HttpOnly, Secure, SameSite, và có kiểm tra tự động khẳng định điều đó."
+      },
+      {
+        "ma": "F11",
+        "tieu_de": "Kế hoạch kiểm thử không có test âm",
+        "muc_ke_hoach": "§8 (kế hoạch kiểm thử)",
+        "quy_tac": "§12.1, §12.2",
+        "cwe": "không có CWE tương ứng — vi phạm quy trình kiểm thử §12.1, §12.2",
+        "muc_do": "cao",
+        "ly_do": "Bốn ca kiểm thử được nêu đều là luồng thuận hoặc lỗi nghiệp vụ thông thường, không có ca nào mô tả hành vi tấn công và kỳ vọng bị chặn. Hệ quả là mọi lỗ hổng F1–F10 sẽ đi qua bộ kiểm thử mà vẫn xanh, và không có bằng chứng nào cho thấy bản vá thực sự có tác dụng.",
+        "thanh_ma_gi": "Bộ test sẽ chỉ gồm các ca happy path; sau khi vá cũng không có test nào đỏ trước và xanh sau, nên bản vá không được kiểm chứng.",
+        "cach_sua": "Bổ sung vào kế hoạch ít nhất một test âm cho từng yêu cầu bảo mật liên quan (§2.1, §3.1, §4.1–§4.4, §6.1, §6.2, §7.1, §8.1, §8.2) và yêu cầu chứng minh test đỏ trước khi vá."
+      },
+      {
+        "ma": "F12",
+        "tieu_de": "Khoá nút giao diện thay cho chốt phía server",
+        "muc_ke_hoach": "§6 ('phía giao diện sẽ khoá nút sau lần bấm đầu')",
+        "quy_tac": "§3.3",
+        "cwe": "CWE-602",
+        "muc_do": "cao",
+        "ly_do": "Bản kế hoạch dùng biện pháp phía trình duyệt làm cơ chế kiểm soát cho một nghiệp vụ đổi số dư. Kẻ tấn công gọi trực tiếp API bằng curl hoặc phát lại gói tin thì biện pháp này không tồn tại, nên toàn bộ hàng rào chống trùng lặp biến mất.",
+        "thanh_ma_gi": "Phía server không có mã nào chống trùng lặp; toàn bộ 'kiểm soát' nằm trong một đoạn JavaScript disable nút submit.",
+        "cach_sua": "Giữ việc khoá nút chỉ như cải thiện trải nghiệm và ghi rõ trong kế hoạch rằng chốt chống trùng nằm ở server bằng khoá idempotency (xem F2)."
+      },
+      {
+        "ma": "F13",
+        "tieu_de": "Triển khai production không có chốt phê duyệt",
+        "muc_ke_hoach": "§9 (triển khai thẳng lên production sau khi test chức năng đạt)",
+        "quy_tac": "§13, §12.3",
+        "cwe": "không có CWE tương ứng — vi phạm quy trình §13 (việc con người phải quyết)",
+        "muc_do": "trung bình",
+        "ly_do": "Kế hoạch đặt điều kiện triển khai là 'test chức năng đạt', không có bước rà soát bảo mật và không có phê duyệt của con người, dù chính sách quy định phê duyệt triển khai production là việc bắt buộc do người quyết. Với các lỗi F1–F3, mở cho 10% khách hàng đã đủ gây thiệt hại tiền thật không hoàn nguyên được.",
+        "thanh_ma_gi": "Pipeline sẽ deploy khi bộ test chức năng xanh, không có cổng chặn nào yêu cầu chữ ký người duyệt hay kết quả rà soát bảo mật.",
+        "cach_sua": "Thêm vào §9 điều kiện tiên quyết: rà soát bảo mật đạt, các test âm ở F11 xanh, và có phê duyệt tường minh của người chịu trách nhiệm trước khi bật cho bất kỳ tỷ lệ khách hàng nào."
+      }
+    ],
+    "khong_phai_phat_hien": [
+      {
+        "muc": "§3.6 — trừ tiền, cộng tiền và ghi transfers nằm trong cùng một transaction, lỗi thì rollback toàn bộ",
+        "ly_do": "Đúng yêu cầu §4.4 về tính nguyên tử và rollback. Phần còn thiếu là khoá chống tranh chấp đồng thời, đã tách thành F9 nên không tính trùng ở đây."
+      },
+      {
+        "muc": "§6 — dòng 'Lỗi cơ sở dữ liệu → 500, rollback transaction'",
+        "ly_do": "Có nêu rollback tường minh ở nhánh lỗi, phù hợp §4.4. Nội dung thông báo lỗi cũng không tiết lộ chi tiết nội bộ."
+      },
+      {
+        "muc": "§4 — phản hồi thành công trả về new_balance cho khách",
+        "ly_do": "§6.1 cấm ghi số dư đầy đủ vào log, không cấm trả số dư cho chính chủ tài khoản qua kênh đã xác thực. Chỉ hợp lệ với điều kiện F1 được sửa; nếu vẫn nhận from_account từ client thì đây trở thành kênh đọc số dư người khác."
+      },
+      {
+        "muc": "§2 — phạm vi loại trừ chuyển tiền liên ngân hàng, chuyển theo lịch hẹn, huỷ giao dịch",
+        "ly_do": "Thu hẹp bề mặt tấn công một cách tường minh, không vi phạm quy tắc nào và không tạo lỗ hổng ẩn."
+      },
+      {
+        "muc": "§6 — trả 404 'Không tìm thấy tài khoản đích' (kênh dò tồn tại tài khoản)",
+        "ly_do": "Đây là rủi ro liệt kê tài khoản thật, nhưng chính sách hiện không có quy tắc nào về chống liệt kê định danh; theo lời mở đầu chính sách, yêu cầu không nằm trong file thì không tồn tại. Không tính là phát hiện, chuyển sang phần con người quyết."
+      },
+      {
+        "muc": "Toàn bộ §9–§11 của chính sách (thư viện, container, hạ tầng dưới dạng mã)",
+        "ly_do": "Bản kế hoạch không thêm thư viện, không đổi ảnh container, không sửa hạ tầng, nên không có gì để đối chiếu ở tầng thiết kế. Nếu khi triển khai F8 có thêm thư viện giới hạn tần suất thì phải ghim phiên bản chính xác theo §9.1."
+      },
+      {
+        "muc": "§1 — mục tiêu đo được (95% dưới 2 giây, lỗi dưới 0,1%)",
+        "ly_do": "Là chỉ tiêu hiệu năng, không xung đột với quy tắc bảo mật nào. Lưu ý duy nhất: không được lấy chỉ tiêu này làm lý do bỏ khoá hàng ở F9 hay giới hạn tần suất ở F8."
+      }
+    ],
+    "con_nguoi_quyet": [
+      "Phê duyệt triển khai lên production và tỷ lệ mở 10% ở §9 của kế hoạch — §13 quy định đây là việc của con người; AI không quyết được mức rủi ro tiền thật mà tổ chức chấp nhận.",
+      "Giá trị hạn mức trên cho mỗi giao dịch và mỗi ngày cần cho F3 — phụ thuộc quy định nghiệp vụ và ngưỡng báo cáo của LabBank, không có dữ kiện nào trong bản kế hoạch.",
+      "Ngưỡng cụ thể của giới hạn tần suất theo tài khoản và theo IP cho F8 — cần số liệu lưu lượng thực tế và tỷ lệ khách dùng chung IP (NAT doanh nghiệp) mà bản kế hoạch không cung cấp.",
+      "Đội vận hành có thật sự cần dữ liệu thẻ để tra soát khiếu nại hay không, và mã tham chiếu thay thế nào là hợp lệ (liên quan F6) — thuộc quy trình nghiệp vụ và yêu cầu tuân thủ dữ liệu thẻ, không suy ra được từ tài liệu.",
+      "Hệ thống hiện tại đã có middleware đặt đủ bốn header §8.1 và cờ cookie §8.2 hay chưa — không đủ dữ kiện, phải xem cấu hình ứng dụng đang chạy; F10 nêu ra như một khoảng trống của tài liệu, không phải kết luận về mã hiện hữu.",
+      "Có yêu cầu chống liệt kê tài khoản qua phản hồi 404 và ô gợi ý tên hay không — hiện chính sách không có quy tắc tương ứng, cần chủ sở hữu chính sách quyết định bổ sung hay chấp nhận rủi ro còn lại.",
+      "Chấp nhận rủi ro còn lại cho mọi mục ở phần không phải phát hiện — theo §13, việc chấp nhận rủi ro không thuộc quyền của AI."
+    ],
+    "tieu_chi_nghiem_thu": [
+      {
+        "ma": "AC-1",
+        "noi_dung": "Gọi POST /api/transfer với tài khoản nguồn không thuộc người dùng đang đăng nhập phải trả 403 và số dư của cả hai tài khoản không đổi.",
+        "phat_hien": "F1"
+      },
+      {
+        "ma": "AC-2",
+        "noi_dung": "Gửi hai yêu cầu chuyển tiền giống nhau kèm cùng một idempotency key phải chỉ tạo đúng một bản ghi trong transfers, lần thứ hai trả về cùng transfer_id của lần đầu.",
+        "phat_hien": "F2"
+      },
+      {
+        "ma": "AC-3",
+        "noi_dung": "amount bằng 0, âm, không phải số, hoặc vượt hạn mức đều bị từ chối bằng 400 và không sinh bản ghi transfers nào.",
+        "phat_hien": "F3"
+      },
+      {
+        "ma": "AC-4",
+        "noi_dung": "Chuyển 0,10 rồi 0,20 rồi kiểm tra tổng biến động số dư đúng bằng 0,30 tuyệt đối; kiểm tra kiểu cột amount không phải REAL/FLOAT và mã không dùng float cho tiền.",
+        "phat_hien": "F4"
+      },
+      {
+        "ma": "AC-5",
+        "noi_dung": "Gọi endpoint gợi ý tên với chuỗi chứa ' OR 1=1-- và với chuỗi UNION SELECT phải trả về kết quả rỗng hoặc lỗi 400, không trả thêm bản ghi và không sinh lỗi cú pháp SQL.",
+        "phat_hien": "F5"
+      },
+      {
+        "ma": "AC-6",
+        "noi_dung": "Sau một giao dịch thành công, toàn bộ log sinh ra không chứa số thẻ, số tài khoản đầy đủ hay số dư; số tài khoản chỉ xuất hiện dạng che bốn số cuối.",
+        "phat_hien": "F6"
+      },
+      {
+        "ma": "AC-7",
+        "noi_dung": "Mỗi lần gọi chuyển tiền, kể cả khi bị từ chối, đều sinh đúng một bản ghi kiểm toán bền vững gồm actor, thời điểm, địa chỉ IP và kết quả kèm lý do.",
+        "phat_hien": "F7"
+      },
+      {
+        "ma": "AC-8",
+        "noi_dung": "Vượt ngưỡng số lệnh chuyển tiền trong cửa sổ thời gian, tính theo cả tài khoản và theo IP, phải trả 429 và không thực hiện giao dịch.",
+        "phat_hien": "F9"
+      },
+      {
+        "ma": "AC-9",
+        "noi_dung": "Hai yêu cầu chuyển tiền chạy song song trên cùng tài khoản có số dư chỉ đủ cho một lệnh: đúng một lệnh thành công, một lệnh bị từ chối, số dư cuối không âm.",
+        "phat_hien": "F9"
+      },
+      {
+        "ma": "AC-10",
+        "noi_dung": "Phản hồi của trang Chuyển tiền và của /api/transfer có đủ bốn header X-Content-Type-Options, X-Frame-Options, Content-Security-Policy, Strict-Transport-Security; cookie phiên có HttpOnly, Secure, SameSite.",
+        "phat_hien": "F10"
+      },
+      {
+        "ma": "AC-11",
+        "noi_dung": "Bộ kiểm thử chứa ít nhất một test âm cho mỗi tiêu chí AC-1 đến AC-10, và mỗi test âm được chứng minh đỏ trên mã chưa vá trước khi chuyển sang xanh.",
+        "phat_hien": "F11"
+      },
+      {
+        "ma": "AC-12",
+        "noi_dung": "Gọi trực tiếp /api/transfer bằng công cụ dòng lệnh, bỏ qua giao diện web, vẫn bị chặn trùng lặp bởi cơ chế phía server chứ không phụ thuộc trạng thái nút submit.",
+        "phat_hien": "F12"
+      },
+      {
+        "ma": "AC-13",
+        "noi_dung": "Pipeline triển khai từ chối phát hành khi thiếu kết quả rà soát bảo mật đạt hoặc thiếu phê duyệt tường minh của người chịu trách nhiệm.",
+        "phat_hien": "F13"
+      }
+    ]
+  }
+}
